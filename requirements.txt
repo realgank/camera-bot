@@ -1,0 +1,10 @@
+# Ядро — только для Telegram-бота
+requests>=2.28
+# Инвентарь и отчёты в Excel
+openpyxl>=3.1
+# QR-наклейки (чистый python, без внешних бинарей)
+segno>=1.5
+# Подпись JWT для сервис-аккаунта Google (Sheets/Drive/Calendar)
+rsa>=4.9
+pyasn1>=0.5
+pyasn1_modules>=0.3

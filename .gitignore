@@ -1,0 +1,62 @@
+# --- секреты (НИКОГДА не коммитить) ---
+tg_bot_config.json
+service-account.json
+*service-account*.json
+_gtoken_cache.json
+.env
+
+# --- боевые данные инвентаря ---
+Все_камеры.xlsx
+*.xlsx
+*.backup.*
+exports/
+config_backups/
+cam_docs/
+
+# --- рантайм-состояние ---
+tg_bot_state.json
+camera_bot.lock
+camera_bot.heartbeat
+_health_state.json
+_health_history.json
+_status_history.json
+_metrics.db*
+_facts_*.json
+_snap_drive_index.json
+_dns_cache.json
+_issues.json
+_maint.json
+_lifecycle.json
+_unknown_queue.json
+_changelog.jsonl
+_acts.json
+zones.json
+checklists.json
+ppr_schedule.json
+kit.json
+contacts.json
+warranty.json
+_gapi_state.json
+_ga_state.json
+models.json
+inventory_schema.json
+
+# --- логи и дампы ---
+*.log
+*.log.*
+camera_bot.jsonl*
+audit.log
+slow.log
+crash_*.json
+state_dump_*.txt
+crashes/
+metrics.csv
+restarts.csv
+events_ring.json
+exit_marker.json
+
+# --- python ---
+__pycache__/
+*.pyc
+.venv/
+venv/

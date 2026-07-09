@@ -1,0 +1,18 @@
+{
+  "token": "PUT_YOUR_TELEGRAM_BOT_TOKEN_HERE",
+  "owner_chat_id": null,
+  "bind_secret": "",
+
+  "cam_user": "Admin",
+  "cam_pass": "1234",
+
+  "scan_subnet": "192.168.0",
+  "find_allow": ["192.168.0", "10.20.50", "10.20.51", "10.20.52", "10.20.53"],
+  "diff_subnets": ["10.20.50", "10.20.51", "10.20.52", "10.20.53"],
+
+  "sheet_id": "",
+  "drive_folder_id": "",
+  "sa_path": "service-account.json",
+
+  "_comment": "token — от @BotFather. owner_chat_id заполнится автоматически по TOFU (первый написавший становится владельцем) либо задайте числом. Google-функции (/sync, /snaps, ...) работают только если заданы sheet_id, drive_folder_id и рядом лежит service-account.json. cam_user/cam_pass — заводские креды камер, подставьте свои. Никогда не коммитьте этот файл после заполнения."
+}
