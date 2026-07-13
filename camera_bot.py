@@ -36,7 +36,7 @@ import logging
 import threading
 from concurrent.futures import ThreadPoolExecutor
 
-sys.path.insert(0, r"C:\Users\1\camera")
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from bot_util import setup_logging, log, log_exc, BOT_VERSION
 import bot_state as st

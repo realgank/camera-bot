@@ -13,7 +13,7 @@ import tkinter as tk
 import webbrowser
 from tkinter import ttk
 
-BASE = r"C:\Users\1\camera"
+BASE = os.path.dirname(os.path.abspath(__file__))
 LOG = os.path.join(BASE, "camera_bot.log")
 CFG = os.path.join(BASE, "tg_bot_config.json")
 TASK = "camera_bot"

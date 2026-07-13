@@ -22,7 +22,7 @@ import requests
 
 from bot_util import log
 
-DEFAULT_SA = r"C:\Users\1\.config\mcp-google-sheets\service-account.json"
+DEFAULT_SA = os.path.join(os.path.dirname(os.path.abspath(__file__)), "service-account.json")
 SCOPE_SHEETS = "https://www.googleapis.com/auth/spreadsheets"
 SCOPE_DRIVE = "https://www.googleapis.com/auth/drive"
 SCOPE_CALENDAR = "https://www.googleapis.com/auth/calendar"
