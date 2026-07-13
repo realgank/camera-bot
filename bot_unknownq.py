@@ -193,30 +193,31 @@ def write_unknowns():
     if not rows:
         store.jsave(_qpath(), {})
         return 0, "не потребовался"
-    bak = bot_dq.backup_xlsx("unknown")
     path = inv.inv_path()
-    wb = openpyxl.load_workbook(path)
-    try:
-        if inv.UNK_SHEET in wb.sheetnames:
-            ws = wb[inv.UNK_SHEET]
-            hdr = [str(c.value or "") for c in ws[1]]
-        else:
-            ws = wb.create_sheet(inv.UNK_SHEET)
-            for i, h in enumerate(UNK_HDRS, 1):
-                ws.cell(row=1, column=i, value=h)
-            hdr = list(UNK_HDRS)
-        idx = [hdr.index(h) if h in hdr else None for h in UNK_HDRS]
-        rn = ws.max_row
-        for row in rows:
-            rn += 1
-            for v, ci in zip(row, idx):
-                if ci is not None and v not in (None, ""):
-                    ws.cell(row=rn, column=ci + 1, value=v)
-        wb.save(path)
-    finally:
-        wb.close()
-    with inv._lock:
-        inv._unk["mtime"] = None
+    with inv.INV_WRITE_LOCK:  # C1: вся секция load→mutate→save
+        bak = bot_dq.backup_xlsx("unknown")
+        wb = openpyxl.load_workbook(path)
+        try:
+            if inv.UNK_SHEET in wb.sheetnames:
+                ws = wb[inv.UNK_SHEET]
+                hdr = [str(c.value or "") for c in ws[1]]
+            else:
+                ws = wb.create_sheet(inv.UNK_SHEET)
+                for i, h in enumerate(UNK_HDRS, 1):
+                    ws.cell(row=1, column=i, value=h)
+                hdr = list(UNK_HDRS)
+            idx = [hdr.index(h) if h in hdr else None for h in UNK_HDRS]
+            rn = ws.max_row
+            for row in rows:
+                rn += 1
+                for v, ci in zip(row, idx):
+                    if ci is not None and v not in (None, ""):
+                        ws.cell(row=rn, column=ci + 1, value=v)
+            inv.save_wb(wb, path)
+        finally:
+            wb.close()
+        with inv._lock:
+            inv._unk["mtime"] = None
     store.jsave(_qpath(), {})     # очередь записана — очищаем
     try:
         import bot_reconcile

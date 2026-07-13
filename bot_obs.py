@@ -261,11 +261,19 @@ def _eval_channel(alert: bool = True) -> str:
         if alert:
             _owner(f"{_ICON.get(new, '⚪')} <b>Канал Telegram: {new}</b> "
                    f"(был {old})\np95 сверх poll: {s['p95'] or 0:.1f}s · "
-                   f"неудач: {s['fail'] * 100:.0f}%", silent=(new == "GOOD"))
+                   f"неудач: {s['fail'] * 100:.0f}%", silent=(new == "GOOD"),
+                   aid="chan_state")
     return _chan["state"]
 
 
-def _owner(text: str, silent: bool = True) -> None:
+def _owner(text: str, silent: bool = True, aid: str = None) -> None:
+    if aid:
+        try:
+            import bot_alerts
+            if bot_alerts.muted(aid):
+                return
+        except Exception:
+            pass
     try:
         import bot_tg as tgm
         owner = st.cget("owner_chat_id")

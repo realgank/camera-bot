@@ -281,47 +281,48 @@ def do_migrate(path=None) -> dict:
     """259: схлопывание дат-колонок (на path; прод — только из cb_dqmigy)."""
     import openpyxl
     path = path or inv.inv_path()
-    wb = openpyxl.load_workbook(path)
-    try:
-        ws = wb[inv.SHEET_MAIN]
-        hdr = [c.value for c in ws[1]]
-        scols = [(i + 1, h) for i, h in enumerate(hdr)
-                 if h and str(h).startswith("Статус")]
-        if len(scols) < 2:
-            return {"migrated": False, "reason": "меньше двух колонок статуса"}
-        last_ci, last_h = scols[-1]
-        m = dq.HDR_DATE_RE.search(str(last_h))
-        checked = m.group(1) if m else ""
-        events = []
-        mac_ci = hdr.index("MAC-адрес") + 1 if "MAC-адрес" in hdr else None
-        ip_ci = hdr.index("IP-адрес") + 1 if "IP-адрес" in hdr else None
-        for ci, h in scols[:-1]:
-            hm = dq.HDR_DATE_RE.search(str(h))
-            hdate = hm.group(1) if hm else str(h)
+    with inv.INV_WRITE_LOCK:  # C1: вся секция load→mutate→save
+        wb = openpyxl.load_workbook(path)
+        try:
+            ws = wb[inv.SHEET_MAIN]
+            hdr = [c.value for c in ws[1]]
+            scols = [(i + 1, h) for i, h in enumerate(hdr)
+                     if h and str(h).startswith("Статус")]
+            if len(scols) < 2:
+                return {"migrated": False, "reason": "меньше двух колонок статуса"}
+            last_ci, last_h = scols[-1]
+            m = dq.HDR_DATE_RE.search(str(last_h))
+            checked = m.group(1) if m else ""
+            events = []
+            mac_ci = hdr.index("MAC-адрес") + 1 if "MAC-адрес" in hdr else None
+            ip_ci = hdr.index("IP-адрес") + 1 if "IP-адрес" in hdr else None
+            for ci, h in scols[:-1]:
+                hm = dq.HDR_DATE_RE.search(str(h))
+                hdate = hm.group(1) if hm else str(h)
+                for rn in range(2, ws.max_row + 1):
+                    v = ws.cell(row=rn, column=ci).value
+                    if v in (None, ""):
+                        continue
+                    events.append({
+                        "ts": int(time.mktime(time.strptime(hdate, "%Y-%m-%d")))
+                        if hm else 0,
+                        "ip": str(ws.cell(row=rn, column=ip_ci).value or "")
+                        if ip_ci else "",
+                        "uid": inv.norm_mac(ws.cell(row=rn, column=mac_ci).value)
+                        if mac_ci else "",
+                        "st": str(v), "src": str(h)})
+            ws.cell(row=1, column=last_ci, value="Статус")
+            pc = len(hdr) + 1 if "Проверено" not in hdr \
+                else hdr.index("Проверено") + 1
+            ws.cell(row=1, column=pc, value="Проверено")
             for rn in range(2, ws.max_row + 1):
-                v = ws.cell(row=rn, column=ci).value
-                if v in (None, ""):
-                    continue
-                events.append({
-                    "ts": int(time.mktime(time.strptime(hdate, "%Y-%m-%d")))
-                    if hm else 0,
-                    "ip": str(ws.cell(row=rn, column=ip_ci).value or "")
-                    if ip_ci else "",
-                    "uid": inv.norm_mac(ws.cell(row=rn, column=mac_ci).value)
-                    if mac_ci else "",
-                    "st": str(v), "src": str(h)})
-        ws.cell(row=1, column=last_ci, value="Статус")
-        pc = len(hdr) + 1 if "Проверено" not in hdr \
-            else hdr.index("Проверено") + 1
-        ws.cell(row=1, column=pc, value="Проверено")
-        for rn in range(2, ws.max_row + 1):
-            if ws.cell(row=rn, column=last_ci).value not in (None, ""):
-                ws.cell(row=rn, column=pc, value=checked)
-        for ci, _h in sorted(scols[:-1], reverse=True):
-            ws.delete_cols(ci)
-        wb.save(path)
-    finally:
-        wb.close()
+                if ws.cell(row=rn, column=last_ci).value not in (None, ""):
+                    ws.cell(row=rn, column=pc, value=checked)
+            for ci, _h in sorted(scols[:-1], reverse=True):
+                ws.delete_cols(ci)
+            inv.save_wb(wb, path)
+        finally:
+            wb.close()
     if path == inv.inv_path():
 
         def _upd(data):

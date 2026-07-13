@@ -69,7 +69,7 @@ def _poll_cross24(ip: str) -> None:
                 mx.owner_alert(f"♻️ <b>Свитч перезагрузился</b>: {esc(host)} "
                                f"<code>{ip}</code> — аптайм сбросился "
                                f"(было {prev_up // 3600}ч, стало {up // 3600}ч). "
-                               f"Питание/крэш? (376)")
+                               f"Питание/крэш? (376)", aid="sw_reboot")
 
     # 380: CPU/память/температура PoE-контроллера
     if cpumem:
@@ -78,13 +78,14 @@ def _poll_cross24(ip: str) -> None:
         if (cpumem.get("cpu") or 0) >= 90 and mx.event_add(ip, "sw_cpu_high",
                                                            str(cpumem["cpu"])):
             mx.owner_alert(f"🌡 CPU свитча {esc(host)} <code>{ip}</code>: "
-                           f"{cpumem['cpu']}% (380)")
+                           f"{cpumem['cpu']}% (380)", aid="sw_cpu_high")
     if poe.get("devTemp") is not None:
         mx.metric_add(f"sw:{ip}", "temp", poe["devTemp"], ts=now)
         if poe["devTemp"] >= 60 and mx.event_add(ip, "sw_temp_high",
                                                  str(poe["devTemp"])):
             mx.owner_alert(f"🌡 <b>Свитч греется</b>: {esc(host)} "
-                           f"<code>{ip}</code> — {poe['devTemp']}°C (380)")
+                           f"<code>{ip}</code> — {poe['devTemp']}°C (380)",
+                           aid="sw_temp_high")
 
     # 322/357/358: PoE-бюджет
     total_mw = poe.get("devPower") or 0
@@ -97,7 +98,7 @@ def _poll_cross24(ip: str) -> None:
             mx.owner_alert(f"⚡ <b>PoE-бюджет {esc(host)}</b> <code>{ip}</code>: "
                            f"{_fmt_w(total_mw)} Вт из {budget_w:.0f} "
                            f"({pct:.0f}%) — следующая камера может не "
-                           f"подняться (358)")
+                           f"подняться (358)", aid="poe_budget")
 
     # per-port: PoE + линк + скорость
     ports_poe = poe.get("ports") or []
@@ -122,7 +123,7 @@ def _poll_cross24(ip: str) -> None:
             if downs >= 5 and mx.event_add(key, "port_flap", str(downs)):
                 mx.owner_alert(f"📉 <b>Порт флапает</b>: {esc(host)} "
                                f"{pname} — {downs} падений за сутки (356). "
-                               f"/port_history {ip} {pname}")
+                               f"/port_history {ip} {pname}", aid="port_flap")
         # 323: тренд PoE per порт
         if cur_mw:
             mx.metric_add(f"sw:{key}", "poe_w", cur_mw / 1000, ts=now)
@@ -130,7 +131,7 @@ def _poll_cross24(ip: str) -> None:
         if p["up"] and o.get("poe_mw") and not cur_mw and not p["poe_on"]:
             if mx.event_add(key, "poe_zero", ""):
                 mx.owner_alert(f"⚡ {esc(host)} {pname}: линк up, но PoE 0 Вт — "
-                               f"деградация камеры/инжектора? (359)")
+                               f"деградация камеры/инжектора? (359)", aid="poe_zero")
         if o.get("poe_mw") and cur_mw and \
                 abs(cur_mw - o["poe_mw"]) / 1000 >= jump_w:
             mx.event_add(key, "poe_jump", f"{o['poe_mw']}->{cur_mw}")
@@ -138,7 +139,7 @@ def _poll_cross24(ip: str) -> None:
         if p["up"] and str(p.get("speed")) == "10":
             if mx.event_add(key, "speed_low", "10M"):
                 mx.owner_alert(f"🐌 {esc(host)} {pname}: линк поднялся на "
-                               f"10 Мбит/с — кабель умирает? (327)")
+                               f"10 Мбит/с — кабель умирает? (327)", aid="speed_low")
     rec["ports"] = new_ports
 
     # 328/329/362: MAC-таблица (переезды, >1 MAC, новые MAC)
@@ -182,19 +183,27 @@ def _check_macs(ip: str, host: str, old: dict) -> None:
                     f"{len(nmacs)} MAC — мини-свитч/хаб? (329)\n"
                     + "\n".join(f"• <code>{esc(m)}</code> "
                                 f"{esc(net.vendor(':'.join(m[i:i+2] for i in range(0, 12, 2))))}"
-                                for m in nmacs[:5]))
+                                for m in nmacs[:5]), aid="multi_mac")
         # 362: новый MAC на порту против прошлого снапшота
         prev = set(old_pm.get(p) or [])
         if prev:
             for m in set(nmacs) - prev:
-                if m in cam_macs:
+                cam = cam_macs.get(m)
+                if cam:
+                    # своя камера появилась на порту — алерт (кулдаун от флапа)
+                    if mx.event_add(f"{ip}:{p}", "cam_online", m, cooldown_h=6):
+                        mx.owner_alert(
+                            f"📷 <b>Камера на порту</b> {esc(host)} {esc(p)}: "
+                            f"{esc(cam.get('name') or cam.get('ip') or '?')} "
+                            f"<code>{esc(cam.get('ip') or '')}</code> — "
+                            f"подключилась к коммутатору", aid="cam_online")
                     continue
                 if mx.event_add(f"{ip}:{p}", "mac_new", m):
                     mac_h = ":".join(m[i:i + 2] for i in range(0, 12, 2)).upper()
                     mx.owner_alert(f"🛡 <b>Новый MAC на порту</b> {esc(host)} "
                                    f"{esc(p)}: <code>{esc(mac_h)}</code> "
                                    f"{esc(net.vendor(mac_h.lower()))} — "
-                                   f"самовольное подключение? (362)")
+                                   f"самовольное подключение? (362)", aid="mac_new")
     # 328: переезд камеры (её MAC против фактов)
     facts_e = sw.by_ip(ip)
     facts_pm = {}
@@ -212,7 +221,7 @@ def _check_macs(ip: str, host: str, old: dict) -> None:
                     mx.owner_alert(f"🚚 <b>Камера переехала</b>: "
                                    f"{esc(rec.get('name') or rec.get('ip'))} "
                                    f"на {esc(host)} была п.{esc(was)}, теперь "
-                                   f"п.{esc(p)} — обнови инвентарь (328)")
+                                   f"п.{esc(p)} — обнови инвентарь (328)", aid="mac_move")
     def _save(d):
         cur = d.get(ip) or {}
         cur["portmac"] = portmac
@@ -267,12 +276,14 @@ def _tick_gw() -> None:
         o = old.get(gw) or {}
         if o.get("alive") and not alive:
             if mx.event_add(gw, "gw_down", ""):
-                mx.owner_alert(f"🚨 <b>Шлюз недоступен</b>: <code>{gw}</code> (389)")
+                mx.owner_alert(f"🚨 <b>Шлюз недоступен</b>: <code>{gw}</code> (389)",
+                               aid="gw_down")
         if mac and o.get("mac") and mac != o["mac"]:
             if mx.event_add(gw, "gw_mac_change", f"{o['mac']}->{mac}"):
                 mx.owner_alert(f"🛡 <b>MAC шлюза сменился</b> <code>{gw}</code>: "
                                f"было <code>{esc(o['mac'])}</code>, стало "
-                               f"<code>{esc(mac)}</code> — подмена/failover? (389)")
+                               f"<code>{esc(mac)}</code> — подмена/failover? (389)",
+                               aid="gw_mac_change")
     def _save(d):
         d["_gw"] = cur
         return d

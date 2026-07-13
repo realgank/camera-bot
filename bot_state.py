@@ -15,7 +15,7 @@ from collections import deque
 
 from bot_util import log, log_exc
 
-BASE = os.path.dirname(os.path.abspath(__file__))
+BASE = r"C:\Users\1\camera"
 CFG_PATH = os.path.join(BASE, "tg_bot_config.json")
 STATE_PATH = os.path.join(BASE, "tg_bot_state.json")       # offset и пр. рантайм (R14)
 LOCK_PATH = os.path.join(BASE, "camera_bot.lock")          # instance-lock (R37)
@@ -52,12 +52,12 @@ DEFAULTS = {
     "max_poll_fails": 60,           # R8
     "log_tail_lines": 30,           # R40
     # ---------- Волна B: инвентарь и Google ----------
-    "inventory_xlsx": os.path.join(BASE, r"Все_камеры.xlsx"),          # I1
-    "facts_switches": os.path.join(BASE, r"_facts_switches.json"),     # I9
-    "facts_cameras": os.path.join(BASE, r"_facts_cameras.json"),       # I47
-    "snap_index_path": os.path.join(BASE, r"_snap_drive_index.json"),  # I31
+    "inventory_xlsx": r"C:\Users\1\camera\Все_камеры.xlsx",          # I1
+    "facts_switches": r"C:\Users\1\camera\_facts_switches.json",     # I9
+    "facts_cameras": r"C:\Users\1\camera\_facts_cameras.json",       # I47
+    "snap_index_path": r"C:\Users\1\camera\_snap_drive_index.json",  # I31
     "sheet_id": "",      # I25
-    "sa_path": os.path.join(BASE, "service-account.json"),
+    "sa_path": r"C:\Users\1\.config\mcp-google-sheets\service-account.json",
     "drive_folder_id": "",          # I30
     "drive_shot_upload": True,      # I30: копия каждого /shot в Drive
     "diff_subnets": ["10.20.50", "10.20.51", "10.20.52", "10.20.53"],  # I33
@@ -68,7 +68,9 @@ DEFAULTS = {
     "health_ports": [80, 554],      # TCP-проба
     "health_workers": 24,           # умеренный пул — не душить сеть
     "health_tcp_timeout_s": 1.0,
-    "health_fail_threshold": 2,     # I17: дебаунс — офлайн после N провалов
+    "health_fail_threshold": 1,     # I17: офлайн после N провальных прогонов
+    "health_confirm_probes": 3,     # падение подтверждаем N пробами подряд
+    "health_confirm_delay_s": 20,   # пауза между подтверждающими пробами
     "health_mass_threshold": 4,     # I18: столько падений в /24 = массовое
     "health_alerts_max": 8,         # одиночных алертов за прогон, не больше
     "health_daily_hour": 9,         # I24: час ежедневного отчёта (локальное время)
@@ -76,8 +78,8 @@ DEFAULTS = {
     "health_factory_probe": True,   # I40: проба заводского IP
     "health_factory_ip": "192.168.0.250",
     "health_subnets": [],           # пусто = все IP инвентаря
-    "health_state_path": os.path.join(BASE, r"_health_state.json"),
-    "health_history_path": os.path.join(BASE, r"_health_history.json"),
+    "health_state_path": r"C:\Users\1\camera\_health_state.json",
+    "health_history_path": r"C:\Users\1\camera\_health_history.json",
     "watch_ips": [],                # U30: /watch — алерт с первого провала
     "fav_ips": [],                  # U6: избранные камеры
     "find_eta": {},                 # U40: прошлые длительности /find по подсетям
@@ -89,19 +91,19 @@ DEFAULTS = {
     # 151: regex парсера имени камеры (группы sys/bld/num)
     "name_regex": r"^(?P<sys>[A-Za-zА-Яа-яЁё]+?)[oо]?\s*-?\s*"
                   r"(?P<bld>\d+\s?[A-Za-zА-ЯЁ])\s*[.\-\s]\s*(?P<num>\d+)",
-    "zones_path": os.path.join(BASE, r"zones.json"),            # 153
-    "checklists_path": os.path.join(BASE, r"checklists.json"),  # 181
-    "ppr_path": os.path.join(BASE, r"ppr_schedule.json"),       # 189-190
-    "kit_path": os.path.join(BASE, r"kit.json"),                # 198
-    "contacts_path": os.path.join(BASE, r"contacts.json"),      # 199
-    "warranty_path": os.path.join(BASE, r"warranty.json"),      # 200
-    "issues_path": os.path.join(BASE, r"_issues.json"),         # 161/164-166
-    "maint_path": os.path.join(BASE, r"_maint.json"),           # 159-160
-    "reminders_path": os.path.join(BASE, r"_reminders.json"),   # 197
-    "shift_path": os.path.join(BASE, r"_shift.json"),           # 185-186
-    "lifecycle_path": os.path.join(BASE, r"_lifecycle.json"),   # 196
-    "acts_path": os.path.join(BASE, r"_acts.json"),             # 169
-    "cam_docs_dir": os.path.join(BASE, r"cam_docs"),            # 193-194
+    "zones_path": r"C:\Users\1\camera\zones.json",            # 153
+    "checklists_path": r"C:\Users\1\camera\checklists.json",  # 181
+    "ppr_path": r"C:\Users\1\camera\ppr_schedule.json",       # 189-190
+    "kit_path": r"C:\Users\1\camera\kit.json",                # 198
+    "contacts_path": r"C:\Users\1\camera\contacts.json",      # 199
+    "warranty_path": r"C:\Users\1\camera\warranty.json",      # 200
+    "issues_path": r"C:\Users\1\camera\_issues.json",         # 161/164-166
+    "maint_path": r"C:\Users\1\camera\_maint.json",           # 159-160
+    "reminders_path": r"C:\Users\1\camera\_reminders.json",   # 197
+    "shift_path": r"C:\Users\1\camera\_shift.json",           # 185-186
+    "lifecycle_path": r"C:\Users\1\camera\_lifecycle.json",   # 196
+    "acts_path": r"C:\Users\1\camera\_acts.json",             # 169
+    "cam_docs_dir": r"C:\Users\1\camera\cam_docs",            # 193-194
     "floor_plans": {},              # 157: "7C-1" -> путь к PNG плана этажа
     "bot_username": "your_bot",  # 172/175: deep-link для QR
     "quiet_enabled": True,          # 162: тихие часы
@@ -118,13 +120,13 @@ DEFAULTS = {
     # ---------- Волна E: наблюдаемость и устойчивость процесса ----------
     "debug": False,                  # 233: мастер-флаг отладочных механик
     "debug_fault_pct": 0,            # 233: % инжектируемых сбоев tg() (только при debug)
-    "obs_jsonl_path": os.path.join(BASE, r"camera_bot.jsonl"),   # 201
+    "obs_jsonl_path": r"C:\Users\1\camera\camera_bot.jsonl",   # 201
     "obs_jsonl_max_mb": 20,          # ротация NDJSON (одна .1-копия)
     "obs_ring_size": 500,            # 207: ring-buffer событий
-    "audit_path": os.path.join(BASE, r"audit.log"),              # 212
-    "slow_log_path": os.path.join(BASE, r"slow.log"),            # 240
+    "audit_path": r"C:\Users\1\camera\audit.log",              # 212
+    "slow_log_path": r"C:\Users\1\camera\slow.log",            # 240
     "slow_threshold_s": 15.0,        # 240: порог «медленной» операции
-    "metrics_csv_path": os.path.join(BASE, r"metrics.csv"),      # 222
+    "metrics_csv_path": r"C:\Users\1\camera\metrics.csv",      # 222
     "metrics_period_min": 5,         # период строки metrics.csv
     "metrics_rss_warn_mb": 300,      # 224: порог RSS для warning владельцу
     "metrics_threads_warn": 60,      # 211
@@ -141,13 +143,13 @@ DEFAULTS = {
     "sentinel_quiet_min": 60,        # 246: пустой getUpdates дольше -> reset Session
     "dns_check_min": 5,              # 218: период фоновой проверки DNS
     "dns_deadline_s": 5.0,           # 218: дедлайн getaddrinfo
-    "dns_cache_path": os.path.join(BASE, r"_dns_cache.json"),    # 219
+    "dns_cache_path": r"C:\Users\1\camera\_dns_cache.json",    # 219
     "netwatch_enabled": True,        # 220/221: детект смены исходящего IP/адаптеров
-    "exit_marker_path": os.path.join(BASE, r"exit_marker.json"),  # 230
-    "restarts_csv": os.path.join(BASE, r"restarts.csv"),         # 236 (пишет run_bot.cmd)
+    "exit_marker_path": r"C:\Users\1\camera\exit_marker.json",  # 230
+    "restarts_csv": r"C:\Users\1\camera\restarts.csv",         # 236 (пишет run_bot.cmd)
     "flap_per_hour": 5,              # 234: рестартов за час = «цикл падений»
-    "code_hash_path": os.path.join(BASE, r"_code_hash.json"),    # 248
-    "crash_dir": os.path.join(BASE, r"crash_reports"),           # 245
+    "code_hash_path": r"C:\Users\1\camera\_code_hash.json",    # 248
+    "crash_dir": r"C:\Users\1\camera\crash_reports",           # 245
     "crash_keep": 50,                # 245: сколько крэш-репортов хранить
     "tracemalloc_frames": 10,        # 209
     "active_profile": "normal",      # 228
@@ -160,26 +162,27 @@ DEFAULTS = {
                  "tg_read_timeout_s": 25, "poll_timeout_s": 30},
     },
     "metrics_sheet_name": "metrics_bot",  # 223: лист в Google-таблице
-    "changelog_path": os.path.join(BASE, r"docs\CHANGELOG.md"),  # 226
+    "changelog_path": r"C:\Users\1\camera\docs\CHANGELOG.md",  # 226
     # ---------- Волна F: качество данных инвентаря и отчётность ----------
-    "schema_path": os.path.join(BASE, r"inventory_schema.json"),     # 251
-    "dq_history_path": os.path.join(BASE, r"_dq_history.json"),      # 287
-    "models_path": os.path.join(BASE, r"models.json"),               # 261/262
+    "schema_path": r"C:\Users\1\camera\inventory_schema.json",     # 251
+    "dq_history_path": r"C:\Users\1\camera\_dq_history.json",      # 287
+    "models_path": r"C:\Users\1\camera\models.json",               # 261/262
     "oui_whitelist": ["E0:7F:88"],   # 258: EVIDENCE Network SIA
     "vlan_rules": {},                # 293: {"Апартаменты": [1], ...}
     "loc_min_count": 3,              # 255: значение «известно», если чаще N
     "cam_subnets": ["10.20.50", "10.20.51", "10.20.52", "10.20.53"],  # 256
     "sw_subnets": ["10.10.60", "10.10.61", "10.10.62",
                    "10.10.63", "10.10.64", "10.10.65"],
-    "changelog_jsonl": os.path.join(BASE, r"_changelog.jsonl"),      # 265
-    "exports_dir": os.path.join(BASE, r"exports"),                   # 267
+    "changelog_jsonl": r"C:\Users\1\camera\_changelog.jsonl",      # 265
+    "provision_log_jsonl": r"C:\Users\1\camera\_provision_log.jsonl",  # ПНР-лог
+    "exports_dir": r"C:\Users\1\camera\exports",                   # 267
     "exports_git": True,             # 267: git-коммит CSV-срезов (inventory:)
     "backup_keep_daily": 14,         # 269: дневные бэкапы, дней
     "backup_keep_weekly": 8,         # 269: недельные, недель
     "digest_weekday": 0,             # 268: 0=понедельник
     "digest_hour": 10,
-    "status_history_path": os.path.join(BASE, r"_status_history.json"),  # 296
-    "reconcile_state_path": os.path.join(BASE, r"_reconcile_state.json"),
+    "status_history_path": r"C:\Users\1\camera\_status_history.json",  # 296
+    "reconcile_state_path": r"C:\Users\1\camera\_reconcile_state.json",
     "facts_max_age_days": 14,        # 299: факты старше — предупреждение
     "smis_schema_version": "1.0",    # 286
     "enrich_batch": 10,              # 298: камер за партию /enrich
@@ -187,27 +190,27 @@ DEFAULTS = {
     "kpi_sheet_enabled": True,       # 285: лист «Дашборд» при /sync
     "kpi_sheet_name": "Дашборд",
     # ---------- Волна G: глубокий мониторинг и аналитика парка ----------
-    "metrics_db_path": os.path.join(BASE, r"_metrics.db"),  # 347: SQLite WAL
+    "metrics_db_path": r"C:\Users\1\camera\_metrics.db",  # 347: SQLite WAL
     "metrics_keep_days": 90,         # 347: ретенция рядов/событий
     "imgqa_enabled": True,           # 301-308: фоновая ротация снимков
     "imgqa_batch": 6,                # камер за цикл (не шторм)
     "imgqa_period_min": 10,
     "imgqa_black_ratio": 0.35,       # 302: кадр < 35% медианы = чёрный/белый
     "imgqa_verify_delay_s": 6,       # 301: пауза перед контрольным кадром
-    "imgqa_state_path": os.path.join(BASE, r"_imgqa_state.json"),
+    "imgqa_state_path": r"C:\Users\1\camera\_imgqa_state.json",
     "imgqa_day_hours": [8, 20],      # 306: «день» с 8:00 до 20:00 локального
     "clock_enabled": True,           # 309-312: опрос часов ротацией
     "clock_batch": 15,
     "clock_period_min": 10,
     "clock_drift_warn_s": 30,        # 309: |смещение| больше -> в отчёт/алерт
     "clock_jump_s": 300,             # 312: скачок смещения = «часы прыгнули»
-    "camtime_state_path": os.path.join(BASE, r"_camtime.json"),
+    "camtime_state_path": r"C:\Users\1\camera\_camtime.json",
     "rtsp_enabled": True,            # 313/316: DESCRIBE-ротация
     "rtsp_batch": 20,
     "rtsp_period_min": 15,
     "rtsp_timeout_s": 4.0,
     "rtsp_bitrate_s": 5,             # 314: секунд чтения interleaved-потока
-    "sdp_facts_path": os.path.join(BASE, r"_facts_sdp.json"),  # 315: эталоны SDP
+    "sdp_facts_path": r"C:\Users\1\camera\_facts_sdp.json",  # 315: эталоны SDP
     "pingq_enabled": True,           # 317-319: серии пингов ротацией
     "pingq_batch": 15,
     "pingq_period_min": 10,
@@ -220,8 +223,8 @@ DEFAULTS = {
     "sec_ports": [21, 23, 80, 554, 8000, 8080],  # 336: скан против baseline
     "sec_risky_ports": [21, 23],     # открылись -> алерт сразу
     "sec_default_hosts": ["ipc", "apix", "localhost", "ipcam", "nvt", "camera"],
-    "secaudit_state_path": os.path.join(BASE, r"_secaudit.json"),
-    "encoders_facts_path": os.path.join(BASE, r"_facts_encoders.json"),  # 339
+    "secaudit_state_path": r"C:\Users\1\camera\_secaudit.json",
+    "encoders_facts_path": r"C:\Users\1\camera\_facts_encoders.json",  # 339
     "arp_flap_window_min": 10,       # 330: окно детекта флаппинга ARP
     "nvr_list": [],                  # 349-350: [{"name","ip","port"}] (пусто)
     # ---------- Волна H: сеть, коммутаторы, топология ----------
@@ -229,11 +232,11 @@ DEFAULTS = {
     "sw_pass": "admin",
     "sw_http_timeout_s": 6,
     "hw_user": "Administrator",      # Huawei VRP по SSH (plink)
-    "hw_passwords": ["#MFK_Admins12", "@MFK_Admins12"],
+    "hw_passwords": [],              # пароли Huawei — только из конфига
     "hw_switches": [],               # IP Huawei-свитчей (10.20.5.x), пусто = нет
     "plink_timeout_s": 35,
     "sw_confirm_ttl_s": 120,         # TTL двухшаговых подтверждений записи
-    "sw_state_path": os.path.join(BASE, r"_sw_state.json"),
+    "sw_state_path": r"C:\Users\1\camera\_sw_state.json",
     "sw_mon_enabled": True,          # 355-359/376/400: фоновая ротация свитчей
     "sw_mon_period_min": 10,         # период тика ротации
     "sw_mon_batch": 2,               # свитчей за тик (малые порции)
@@ -247,11 +250,11 @@ DEFAULTS = {
     "sw_backup_hour": 3,             # час начала суточного бэкапа
     "sw_backup_batch": 4,            # свитчей за тик бэкапа
     "sw_backup_keep": 30,            # копий на свитч
-    "config_backups_dir": os.path.join(BASE, r"config_backups"),
+    "config_backups_dir": r"C:\Users\1\camera\config_backups",
     "vlan_port_ref": {},             # 368: {"10.10.60.52": {"GE1": 1, ...}}
     "sw_ntp_server": "",             # 379: эталонный NTP (пусто = не настраивать)
     "facts_refresh_workers": 6,      # 397: потоков пересборки фактов
-    "facts_prev_path": os.path.join(BASE, r"_facts_switches.prev.json"),  # 398
+    "facts_prev_path": r"C:\Users\1\camera\_facts_switches.prev.json",  # 398
     # ---------- Волна I: Google-экосистема и автоматизация (401-450) ----------
     "sync_diff_enabled": True,       # 429: дифф-синк вместо clear+rewrite
     "sync_diff_sheet": "Изменённые (бот)",  # 413: автодифф синка (отдельный лист)
@@ -269,7 +272,7 @@ DEFAULTS = {
     "drive_table_snapshots": 10,     # 427: снапшот-копий таблицы хранить
     "drive_backup_enabled": True,    # 447: ночной бэкап xlsx в Drive
     "drive_backup_hour": 4,
-    "ga_state_path": os.path.join(BASE, r"_gapi_state.json"),
+    "ga_state_path": r"C:\Users\1\camera\_gapi_state.json",
     "ga_check_on_start": True,       # 442: fail-fast проверка доступов при старте
     "sa_key_max_age_days": 180,      # 440/441: возраст ключа SA
     "gcal_enabled": False,           # 417: Calendar API может быть выключен
@@ -289,21 +292,32 @@ DEFAULTS = {
     # ---------- Волна J: отложенные операции (DEFER) ----------
     "poe_reboot_wait_s": 90,         # I11/I12: ждать возвращения камеры (TCP)
     "poe_reboot_off_s": 3,           # пауза PoE off -> on
+    # ---------- watchdog зависших новых/заводских камер (bot_newcam) ----------
+    "newcam_enabled": True,          # фон: следить за новыми/заводскими камерами
+    "newcam_watch_factory": True,    # наблюдать health_factory_ip (192.168.0.250)
+    "newcam_watch_ips": [],          # доп. IP под наблюдение (провижн/новые)
+    "newcam_period_min": 2,          # период тика (ловим боот/зависание быстро)
+    "newcam_boot_grace_s": 180,      # пинг-есть/ONVIF-нет короче — норм. боот, тихо
+    "newcam_hung_after_s": 600,      # дольше — «зависла», включаем обход
+    "newcam_auto_poe": True,         # авто-PoE-ребут зависшей (иначе кнопка вручную)
+    "newcam_reset_cd_h": 6,          # не чаще 1 авто-ребута на IP за N часов
+    "newcam_conflict_cd_h": 6,       # анти-спам алерта о конфликте IP
     "provision_prefix_len": 24,      # I37: маска нового IP
     "provision_gw_retries": 6,       # ловушка HTTP 500 в окне ребута камеры
     "provision_gw_delay_s": 6,
     "provision_wait_s": 90,          # ждать камеру на новом IP
     "macfill_batch": 10,             # I44: камер за партию /macfill
-    "unknown_queue_path": os.path.join(BASE, r"_unknown_queue.json"),  # I36
+    "unknown_queue_path": r"C:\Users\1\camera\_unknown_queue.json",  # I36
     "unknown_daily_hour": 11,        # I36: час суточной сводки
     "unknown_keep_days": 30,         # I36: не видели дольше — из очереди
     "autosync_hours": 0,             # I27: 0 = автосинк выключен
-    "autosync_state_path": os.path.join(BASE, r"_autosync.json"),
+    "autosync_state_path": r"C:\Users\1\camera\_autosync.json",
     "snapall_workers": 5,            # I32: параллельных снимков
     "snapall_max": 300,              # I32: потолок камер за один /snapall
     "clip_seconds": 8,               # U16: длительность клипа по умолчанию
     "clip_max_s": 15,                # U16: потолок длительности
     "inline_enabled": True,          # U44: inline-режим (нужен /setinline)
+    "alerts_off": [],                # /alerts: id выключенных фоновых алертов
 }
 
 TOKEN_RE = re.compile(r"^\d{6,12}:[A-Za-z0-9_-]{30,}$")

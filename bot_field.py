@@ -165,6 +165,12 @@ def try_text(chat, text, reply_to=None) -> bool:
     """Хук свободного текста из camera_bot (после кнопок/команд/IP).
     True — обработано."""
     t = (text or "").strip()
+    try:  # ПНР: ждём название новой камеры для /provision
+        import bot_provision
+        if bot_provision.capture_name(chat, t):
+            return True
+    except Exception:
+        pass
     try:  # заметка к шагу обхода/чек-листа (182)
         import bot_check
         if bot_check.capture_note(chat, t):

@@ -44,15 +44,10 @@ def _resolve_cam(arg):
         return None
 
 # ---------- Клавиатуры ----------
-MAIN_KB = {
-    "keyboard": [
-        ["📸 Снимок", "🩺 Диагностика", "ℹ️ Инфо"],
-        ["🔍 Поиск камер"],
-        ["📊 Статус", "🏓 Пинг", "❓ Помощь"],
-    ],
-    "resize_keyboard": True,
-    "is_persistent": True,
-}
+# Постоянная reply-клавиатура отключена по просьбе владельца (мешала висеть под
+# полем ввода). Теперь любое место, где раньше показывалась «главная клавиатура»,
+# наоборот УБИРАЕТ её из чата. Действия доступны командами и инлайн-кнопками.
+MAIN_KB = {"remove_keyboard": True}
 BTN_ASK = {"📸 Снимок": "shot", "🩺 Диагностика": "diag", "ℹ️ Инфо": "info"}
 BTN_CMD = {"🔍 Поиск камер": "/find", "📊 Статус": "/status",
            "🏓 Пинг": "/ping", "❓ Помощь": "/help"}
@@ -417,6 +412,8 @@ import bot_nightly as _ni  # noqa: E402    (ночные задачи 415/446-45
 # Волна J: отложенные операции DEFER (I11/I12, I27, I32, I36, I37/38/41,
 # I44, U16, U44) — все записи только через двухшаговые подтверждения
 import bot_poe as _poe  # noqa: E402       (/reboot — PoE-цикл порта)
+import bot_newcam as _ncm  # noqa: E402    (watchdog зависших новых/заводских камер)
+import bot_alerts as _alr  # noqa: E402    (/alerts — вкл/выкл фоновых уведомлений)
 import bot_provision as _prov  # noqa: E402  (/provision — ПНР заводской)
 import bot_macfill as _mf  # noqa: E402    (/macfill — MAC в инвентарь)
 import bot_unknownq as _uq  # noqa: E402   (очередь «Неизвестных»)
@@ -430,7 +427,7 @@ for _mod in (_hi, _hm, _ux, _hh,
              _mx, _iq, _ct, _rts, _pd, _sa,
              _tp, _swm, _swk, _swa, _swc, _nc,
              _gs2, _gf, _gd2, _gc, _ni,
-             _poe, _prov, _mf, _uq, _asn, _mo, _il):
+             _poe, _ncm, _alr, _prov, _mf, _uq, _asn, _mo, _il):
     HANDLERS.update(_mod.HANDLERS)
     ALIASES.update(_mod.ALIASES)
     CB_EXT.update(getattr(_mod, "CALLBACKS", {}))

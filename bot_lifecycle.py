@@ -234,6 +234,12 @@ def _tick_reminders():
     owner = st.cget("owner_chat_id")
     if not owner:
         return
+    try:
+        import bot_alerts
+        if bot_alerts.muted("reminder"):
+            return
+    except Exception:
+        pass
     for it in due:
         rec = inv.get(it["ip"])
         card = inv.card_text(rec) if rec else f"<code>{it['ip']}</code>"

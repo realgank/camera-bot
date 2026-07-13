@@ -143,7 +143,7 @@ class TestChannelState(Base):
         """214: GOOD -> DEGRADED -> BAD -> GOOD с алертами на переходах."""
         alerts = []
         with mock.patch.object(obs, "_owner",
-                               lambda text, silent=True: alerts.append(text)):
+                               lambda text, silent=True, **kw: alerts.append(text)):
             self._fill(over=0, fail_share=0)
             self.assertEqual(obs._eval_channel(), "GOOD")
             self.assertEqual(alerts, [])

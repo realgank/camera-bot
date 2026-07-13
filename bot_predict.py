@@ -94,13 +94,14 @@ def _ping_one(ip: str) -> None:
                 mx.owner_alert(f"🛣 <b>TTL сменился</b>: "
                                f"{esc(inv.label(ip) or ip)} — было "
                                f"{int(prev_ttl)}, стало {ttl}. Ответ приходит "
-                               f"другим маршрутом (proxy-ARP FortiGate?)")
+                               f"другим маршрутом (proxy-ARP FortiGate?)",
+                               aid="ttl_change")
     if base and base >= 1 and med >= base * 3:              # 317
         if mx.event_add(ip, "rtt_high", f"{med:.0f}ms vs base {base:.0f}ms"):
             mx.owner_alert(f"🐢 <b>RTT ×3 к баз. линии</b>: "
                            f"{esc(inv.label(ip) or ip)} — {med:.0f} мс при "
                            f"медиане 7 дн. {base:.0f} мс (линк/PoE "
-                           f"деградирует?) · /trend {ip}")
+                           f"деградирует?) · /trend {ip}", aid="rtt_spike")
 
 
 def _tick_ping() -> None:
@@ -190,7 +191,7 @@ def _tick_risk() -> None:
     mx.kv_set("risk_week", wk)
     top = risk_top(10)
     if top:
-        mx.owner_alert("\n".join(_risk_text(top)), silent=True)
+        mx.owner_alert("\n".join(_risk_text(top)), silent=True, aid="risk_digest")
 
 
 # ---------- 343: MTBF/MTTR ----------

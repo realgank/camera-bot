@@ -34,18 +34,57 @@ def due_at(now_dt, hour, last_date, weekday=None, monthday=None):
     return last_date != now_dt.date().isoformat()
 
 
+NIGHTLY_MAX_TRIES = 3   # m1: попыток на задачу за ночь
+
+
 def _daily(name, hour, weekday=None, monthday=None):
+    """True, если задачу пора запускать сегодня. m1: отметка «выполнено»
+    ставится НЕ здесь, а в _run_sched при успехе (или после исчерпания
+    попыток) — упавшая задача ретраится на следующем тике."""
     s = store.jload(st.cget("ga_state_path"), {})
     last = (s.get("nightly_done") or {}).get(name)
     if not due_at(datetime.datetime.now(), hour, last, weekday, monthday):
         return False
+    tr = (s.get("nightly_tries") or {}).get(name) or {}
+    today = datetime.date.today().isoformat()
+    if tr.get("date") == today and int(tr.get("n") or 0) >= NIGHTLY_MAX_TRIES:
+        return False   # попытки на сегодня исчерпаны
+    return True
 
+
+def _mark_done(name):
+    """Успех: задача выполнена за сегодня, счётчик попыток сброшен."""
     def upd(d):
         d.setdefault("nightly_done", {})
         d["nightly_done"][name] = datetime.date.today().isoformat()
+        (d.get("nightly_tries") or {}).pop(name, None)
         return d
     store.jupdate(st.cget("ga_state_path"), {}, upd)
-    return True
+
+
+def _mark_fail(name):
+    """Провал: +1 к счётчику попыток за сегодня; после NIGHTLY_MAX_TRIES —
+    день отмечается провалом (nightly_done), чтобы не молотить бесконечно."""
+    today = datetime.date.today().isoformat()
+    box = {"n": 0}
+
+    def upd(d):
+        tries = d.setdefault("nightly_tries", {})
+        tr = tries.get(name) or {}
+        n = (int(tr.get("n") or 0) + 1) if tr.get("date") == today else 1
+        tries[name] = {"date": today, "n": n}
+        box["n"] = n
+        if n >= NIGHTLY_MAX_TRIES:
+            d.setdefault("nightly_done", {})
+            d["nightly_done"][name] = today   # провал дня — до завтра
+        return d
+    store.jupdate(st.cget("ga_state_path"), {}, upd)
+    if box["n"] >= NIGHTLY_MAX_TRIES:
+        log(f"nightly: {name}: {box['n']} провалов подряд — "
+            f"до завтра больше не пробую")
+    else:
+        log(f"nightly: {name}: попытка {box['n']}/{NIGHTLY_MAX_TRIES} "
+            f"неудачна — ретрай на следующем тике")
 
 
 # ---------- 419: журнал ночных задач ----------
@@ -66,13 +105,25 @@ def nightly_log(task, t0, ok, info):
 
 
 def _run(task, fn):
+    """Запуск задачи с журналом (419). Возвращает True при успехе."""
     t0 = time.time()
     try:
         info = fn()
         nightly_log(task, t0, True, info or "готово")
+        return True
     except Exception as e:
         log_exc(f"nightly: {task}")
         nightly_log(task, t0, False, f"{type(e).__name__}: {e}")
+        return False
+
+
+def _run_sched(task, fn):
+    """m1: плановый запуск — отметка «выполнено» только при успехе;
+    при провале — счётчик попыток (ретрай на следующем тике)."""
+    if _run(task, fn):
+        _mark_done(task)
+    else:
+        _mark_fail(task)
 
 
 # ---------- 446: ночная сверка сеть-vs-инвентарь ----------
@@ -137,6 +188,12 @@ def _morning_tick():
                   lambda d: {**d, "morning_summary": None})
     owner = st.cget("owner_chat_id")
     if owner:
+        try:
+            import bot_alerts
+            if bot_alerts.muted("nightly_report"):
+                return
+        except Exception:
+            pass
         import bot_tg as tgm
         tgm.send(owner, text, silent=True)
 
@@ -197,7 +254,10 @@ INV_GIT_FILES = ["Все_камеры.xlsx", "_facts_cameras.json",
 
 def git_commit_run():
     flags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
-    r = subprocess.run(["git", "-C", st.BASE, "status", "--porcelain", "--"]
+    # m4: core.quotepath=false — кириллические имена в выводе как есть,
+    # а не octal-escape ("\320\222...") в сообщении коммита
+    r = subprocess.run(["git", "-C", st.BASE, "-c", "core.quotepath=false",
+                        "status", "--porcelain", "--"]
                        + INV_GIT_FILES, capture_output=True, timeout=30,
                        creationflags=flags)
     changed = [ln[3:].strip() for ln in
@@ -216,8 +276,13 @@ def git_commit_run():
                     f"/✏️{len(d['changed'])})")
     except Exception:
         log_exc("nightly: дифф для сообщения коммита")
-    subprocess.run(["git", "-C", st.BASE, "add", "--"] + INV_GIT_FILES,
-                   capture_output=True, timeout=30, creationflags=flags)
+    r = subprocess.run(["git", "-C", st.BASE, "add", "--"] + INV_GIT_FILES,
+                       capture_output=True, timeout=30, creationflags=flags)
+    if r.returncode != 0:   # m4: провал git add — логируем и не коммитим
+        err = ((r.stderr or r.stdout or b"")
+               .decode("utf-8", errors="replace").strip())
+        log(f"nightly: git add провалился (rc={r.returncode}): {err[:200]}")
+        return f"git add провалился (rc={r.returncode}): {err[:120]}"
     r = subprocess.run(["git", "-C", st.BASE, "commit",
                         "-m", f"inventory-nightly: {msg}", "--"]
                        + INV_GIT_FILES, capture_output=True, timeout=30,
@@ -366,17 +431,17 @@ def _tick():
     """Минутный тик: раскладка ночных задач по часам."""
     h = int(st.cget("nightly_hour"))
     if st.cget("nightly_recon_enabled") and _daily("recon", h):
-        _run("recon", recon_run)
+        _run_sched("recon", recon_run)
     if st.cget("git_autocommit_enabled") and _daily("git", h):
-        _run("git", git_commit_run)
+        _run_sched("git", git_commit_run)
     if st.cget("drive_backup_enabled") \
             and _daily("backup", st.cget("drive_backup_hour")):
-        _run("backup", _backup)
+        _run_sched("backup", _backup)
     if st.cget("cleanup_enabled") and _daily(
             "cleanup", h + 1, weekday=st.cget("cleanup_weekday")):
-        _run("cleanup", cleanup_run)
+        _run_sched("cleanup", cleanup_run)
     if st.cget("sla_gsheet_enabled") and _daily("sla", h + 1, monthday=1):
-        _run("sla", sla_push)
+        _run_sched("sla", sla_push)
     _morning_tick()
 
 

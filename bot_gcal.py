@@ -78,6 +78,24 @@ def _parse_date(tok):
         return None
 
 
+def _future_event_exists(summary):
+    """Дедуп повторного /gcal setup: есть ли уже БУДУЩЕЕ событие с таким
+    summary. При ошибке проверки — False (лучше дубль, чем без напоминания)."""
+    try:
+        cal_id = ensure_calendar()
+        now = datetime.datetime.now(datetime.timezone.utc).isoformat()
+        j = g.gjson("GET", f"{CAL}/calendars/{cal_id}/events", sa_path=_sa(),
+                    scope=g.SCOPE_CALENDAR, timeout=30,
+                    params={"q": summary, "timeMin": now,
+                            "singleEvents": "true", "maxResults": 50})
+        return any(it.get("summary") == summary
+                   for it in j.get("items", [])
+                   if it.get("status") != "cancelled")
+    except Exception:
+        log_exc("gcal: проверка дубликата напоминания не удалась")
+        return False
+
+
 def setup_reminders():
     """418: стандартные инфраструктурные дедлайны (ключ SA)."""
     out = []
@@ -86,12 +104,15 @@ def setup_reminders():
                    + datetime.timedelta(
                        days=float(st.cget("sa_key_max_age_days")) - 14))
         if key_day > datetime.date.today():
-            add_event(key_day.isoformat(),
-                      "🔑 Ротация ключа сервис-аккаунта Google",
-                      "Ключ SA приближается к порогу 180 дн. — создай новый "
-                      "ключ, подмени json, проверь /ga_health, удали старый "
-                      "(идея 441).")
-            out.append(f"ключ SA — {key_day.isoformat()}")
+            summary = "🔑 Ротация ключа сервис-аккаунта Google"
+            if _future_event_exists(summary):  # дубль от повторного setup
+                out.append("ключ SA — напоминание уже стоит")
+            else:
+                add_event(key_day.isoformat(), summary,
+                          "Ключ SA приближается к порогу 180 дн. — создай новый "
+                          "ключ, подмени json, проверь /ga_health, удали старый "
+                          "(идея 441).")
+                out.append(f"ключ SA — {key_day.isoformat()}")
     except OSError:
         pass
     return out

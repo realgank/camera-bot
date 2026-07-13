@@ -458,7 +458,7 @@ def startup_check():
                     "☁️❌ <b>Google-доступы сломаны</b> (/sync упадёт):\n"
                     + "\n".join("• " + esc(p) for p in problems)
                     + f"\nРасшарь на <code>{esc(g.sa_email(_sa()))}</code> "
-                      f"и проверь /ga_health")
+                      f"и проверь /ga_health", aid="gapi_broken")
             except Exception:
                 pass
         else:

@@ -457,25 +457,26 @@ def apply_writes(writes, tag="dq", who="bot") -> str:
     if not writes:
         raise ValueError("нет изменений для записи")
     import openpyxl
-    bak = backup_xlsx(tag)
     path = inv.inv_path()
-    wb = openpyxl.load_workbook(path)
-    try:
-        for sheet, rn, col, _old, new in writes:
-            ws = wb[sheet]
-            headers = [c.value for c in ws[1]]
-            if col in headers:
-                ci = headers.index(col) + 1
-            else:
-                ci = len(headers) + 1
-                ws.cell(row=1, column=ci, value=col)
-            ws.cell(row=rn, column=ci, value=new)
-        wb.save(path)
-    finally:
-        wb.close()
-    with inv._lock:
-        inv._inv["mtime"] = None
-        inv._unk["mtime"] = None
+    with inv.INV_WRITE_LOCK:  # C1: вся секция load→mutate→save
+        bak = backup_xlsx(tag)
+        wb = openpyxl.load_workbook(path)
+        try:
+            for sheet, rn, col, _old, new in writes:
+                ws = wb[sheet]
+                headers = [c.value for c in ws[1]]
+                if col in headers:
+                    ci = headers.index(col) + 1
+                else:
+                    ci = len(headers) + 1
+                    ws.cell(row=1, column=ci, value=col)
+                ws.cell(row=rn, column=ci, value=new)
+            inv.save_wb(wb, path)
+        finally:
+            wb.close()
+        with inv._lock:
+            inv._inv["mtime"] = None
+            inv._unk["mtime"] = None
     try:
         import bot_reconcile
         for sheet, rn, col, old, new in writes:

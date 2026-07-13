@@ -1,7 +1,8 @@
 # -*- coding: utf-8 -*-
 """Фоновый health-check парка камер (Волна C): TCP-проба 80/554 всех IP
 инвентаря раз в N минут, состояние _health_state.json, история переходов
-_health_history.json (кольцо 30 дней), дебаунс 2-3 провала, алерты владельцу
+_health_history.json (кольцо 30 дней), падение подтверждается
+health_confirm_probes пробами подряд внутри прогона, алерты владельцу
 (падение/восстановление, группировка массовых), проба заводского 192.168.0.250,
 ежедневный отчёт, /watch-список.
 I14-I18, I21-I24 (расчёты), I40, U30. Первый прогон — через 2 мин после старта
@@ -31,14 +32,36 @@ RUN_LOCK = threading.Lock()   # single-flight run_once
 # Волна D: минутные тики фонового цикла (напоминания 197, снузы 161,
 # эскалация 163, тихие часы 162, ППР 189). Модули регистрируются при импорте.
 MINUTE_TICKS: list = []
+# M1: тики бегут в своих воркер-потоках, чтобы зависший тик (автосинк с
+# Google-таймаутами, recon-скан подсетей) не замораживал health-прогоны.
+_TICK_THREADS: Dict[str, threading.Thread] = {}   # имя тика -> живой поток
+
+
+def _tick_name(fn) -> str:
+    return (f"{getattr(fn, '__module__', '?')}."
+            f"{getattr(fn, '__name__', '?')}")
+
+
+def _tick_worker(fn, name: str) -> None:
+    try:
+        fn()
+    except Exception:
+        log_exc(f"health: тик {name} упал")
 
 
 def _run_ticks() -> None:
+    """Каждый тик — в отдельном daemon-потоке; health-цикл не ждёт их.
+    Single-flight: если прошлый запуск тика ещё жив — новый не стартуем."""
     for fn in list(MINUTE_TICKS):
-        try:
-            fn()
-        except Exception:
-            log_exc(f"health: тик {getattr(fn, '__name__', '?')} упал")
+        name = _tick_name(fn)
+        prev = _TICK_THREADS.get(name)
+        if prev is not None and prev.is_alive():
+            log(f"health: тик {name} ещё выполняется — пропускаю запуск")
+            continue
+        t = threading.Thread(target=_tick_worker, args=(fn, name),
+                             name=f"tick:{name}", daemon=True)
+        _TICK_THREADS[name] = t
+        t.start()
 
 
 def _spath() -> str:
@@ -131,7 +154,15 @@ def probe(ip: str) -> bool:
                          t=float(st.cget("health_tcp_timeout_s")))
 
 
-def _alert(text: str, markup: Optional[dict] = None, silent: bool = False) -> None:
+def _alert(text: str, markup: Optional[dict] = None, silent: bool = False,
+           aid: str = None) -> None:
+    if aid:  # /alerts: выключенные фоновые алерты не шлём
+        try:
+            import bot_alerts
+            if bot_alerts.muted(aid):
+                return
+        except Exception:
+            pass
     owner = st.cget("owner_chat_id")
     if owner:
         tgm.send(owner, text, markup=markup, silent=silent)
@@ -187,6 +218,31 @@ def _apply_probe(ip: str, ok: bool, now: float) -> Optional[dict]:
     return ev
 
 
+def _confirm_downs(results: List[Tuple[str, bool]]) -> List[Tuple[str, bool]]:
+    """Кандидаты в «упала» (были живы, проба провалилась) перепроверяются
+    ещё health_confirm_probes-1 раз с паузой — отсекаем разовые TCP-блипы;
+    алерт уходит только после серии подтверждённых провалов."""
+    probes = int(st.cget("health_confirm_probes"))
+    if probes <= 1:
+        return results
+    with _lock:
+        was_ok = {ip for ip, e in _state["ips"].items() if e.get("ok") is True}
+    res = dict(results)
+    cand = [ip for ip, ok in results if not ok and ip in was_ok]
+    for _ in range(probes - 1):
+        if not cand:
+            break
+        time.sleep(float(st.cget("health_confirm_delay_s")))
+        with ThreadPoolExecutor(max_workers=int(st.cget("health_workers")),
+                                thread_name_prefix="health") as ex:
+            recheck = list(zip(cand, ex.map(probe, cand)))
+        for ip, ok in recheck:
+            if ok:
+                res[ip] = True
+        cand = [ip for ip, ok in recheck if not ok]
+    return [(ip, res[ip]) for ip, _ in results]
+
+
 def _alert_downs(downs: List[str]) -> None:
     """I15 + I18: одиночные алерты либо группировка по подсети/свитчу.
     Волна D: перед алертами — фильтр bot_ops (159 maint / 161 snooze /
@@ -219,7 +275,7 @@ def _alert_downs(downs: List[str]) -> None:
                 lines += bot_sw_mon.mass_context(ips)
             except Exception:
                 log_exc("health: bot_sw_mon.mass_context")
-            _alert("\n".join(lines))
+            _alert("\n".join(lines), aid="cam_mass")
         else:
             singles.extend(ips)
     try:  # 162: тихие часы — некритичные одиночные копим до утра
@@ -234,10 +290,10 @@ def _alert_downs(downs: List[str]) -> None:
               if rec.get("switch") or rec.get("port") else "")
         _alert(f"🔴 <b>Камера упала</b>: {esc(_label(ip))}"
                + (f"\n📍 {esc(loc)}" if loc else "") + sw,
-               markup=kb_fn(ip))
+               markup=kb_fn(ip), aid="cam_down")
     if len(singles) > int(st.cget("health_alerts_max")):
         _alert(f"🔴 … и ещё {len(singles) - int(st.cget('health_alerts_max'))} "
-               f"падений — смотри /offline")
+               f"падений — смотри /offline", aid="cam_down")
 
 
 def _alert_ups(ups: List[dict]) -> None:
@@ -245,7 +301,8 @@ def _alert_ups(ups: List[dict]) -> None:
     for i, ev in enumerate(ups[:int(st.cget("health_alerts_max"))]):
         ip = ev["ip"]
         _alert(f"🟢 <b>Камера ожила</b>: {esc(_label(ip))}\n"
-               f"⏳ лежала {_fmt_dur(ev.get('dur', 0))}", markup=_ip_kb(ip))
+               f"⏳ лежала {_fmt_dur(ev.get('dur', 0))}", markup=_ip_kb(ip),
+               aid="cam_up")
         if i < 2:  # автоснимок best-effort, не задерживаем прогон надолго
             try:
                 from onvif_snap import get_snapshot
@@ -268,7 +325,7 @@ def _probe_factory(alerts: bool) -> None:
     if ok and not was and alerts:
         _alert(f"🏭 <b>Появилась заводская камера</b> <code>{fip}</code> — "
                f"похоже, подключили новую (все Apix с завода на этом IP).",
-               markup=_ip_kb(fip))
+               markup=_ip_kb(fip), aid="factory_appeared")
 
 
 def run_once(alerts: bool = True) -> dict:
@@ -285,6 +342,7 @@ def run_once(alerts: bool = True) -> dict:
                                 thread_name_prefix="health") as ex:
             for ip, ok in zip(ips, ex.map(probe, ips)):
                 results.append((ip, ok))
+        results = _confirm_downs(results)
         now = time.time()
         downs, ups = [], []
         with _lock:
@@ -403,7 +461,8 @@ def _maybe_daily() -> None:
         with _lock:
             _state["last_daily"] = today
             _save_state()
-        _alert("🗓 <b>Ежедневный отчёт</b>\n" + report_text(), silent=True)
+        _alert("🗓 <b>Ежедневный отчёт</b>\n" + report_text(), silent=True,
+               aid="daily_report")
 
 
 def run_loop(stop_event: threading.Event) -> None:

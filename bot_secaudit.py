@@ -69,7 +69,7 @@ def _canary(ip: str) -> None:
     if mx.event_add(ip, "auth401", cooldown_h=24):
         mx.owner_alert(f"🚨 <b>КРИТИЧНО: не подошли креды Admin/1234</b> на "
                        f"{esc(inv.label(ip) or ip)} — кто-то сменил пароль "
-                       f"камеры! (335)")
+                       f"камеры! (335)", aid="cred_fail")
 
 
 # ---------- 330: ARP-флаппинг ----------
@@ -99,7 +99,8 @@ def _tick_arp() -> None:
                         f"отвечает попеременно MAC:\n"
                         + "\n".join(f"• <code>{esc(m)}</code> "
                                     f"({esc(net.vendor(m))})" for m in macs)
-                        + "\nКлассика после ПНР заводских камер (330).")
+                        + "\nКлассика после ПНР заводских камер (330).",
+                        aid="ip_dup")
         _arp_prev[ip] = mac
 
 
@@ -132,7 +133,8 @@ def _sweep_one(ip: str) -> None:
                                f"{esc(inv.label(ip) or ip)}:\nбыло: "
                                f"<code>{esc(', '.join(old) or '—')}</code>\n"
                                f"стало: <code>{esc(', '.join(u['users']))}"
-                               f"</code>\nЧьё-то вмешательство? (334)")
+                               f"</code>\nЧьё-то вмешательство? (334)",
+                               aid="users_change")
     ports = net.open_ports(ip, ports=tuple(st.cget("sec_ports")))
     old_ports = (_state().get(ip) or {}).get("ports")
     rec["ports"] = ports
@@ -145,7 +147,7 @@ def _sweep_one(ip: str) -> None:
                     mx.owner_alert(f"🔓 <b>Открылись рискованные порты</b> "
                                    f"{esc(', '.join(map(str, risky)))} на "
                                    f"{esc(inv.label(ip) or ip)} — сброс в "
-                                   f"дефолт или зловред? (336)")
+                                   f"дефолт или зловред? (336)", aid="risky_ports")
     e = q.get_encoders(ip)
     if "encoders" in e and e["encoders"]:                       # 339/340
         def _fn(d):
@@ -159,7 +161,8 @@ def _sweep_one(ip: str) -> None:
                         mx.owner_alert(
                             f"🎛 <b>Дрейф энкодера</b> "
                             f"{esc(inv.label(ip) or ip)} [{esc(name)}]: "
-                            f"{esc(k)} {esc(was)} → {esc(now_)} (340)")
+                            f"{esc(k)} {esc(was)} → {esc(now_)} (340)",
+                            aid="enc_drift")
             ent["cur"] = e["encoders"]
             ent["ts"] = int(time.time())
             d[ip] = ent
@@ -177,7 +180,8 @@ def _sweep_one(ip: str) -> None:
         if mx.event_add(ip, "factory_reset", rec.get("host") or ""):
             mx.owner_alert(f"🏭 <b>Похоже на сброс к заводским</b>: "
                            f"{esc(inv.label(ip) or ip)} — дефолтный hostname "
-                           f"+ DHCP + часы {year} + один пользователь (338)")
+                           f"+ DHCP + часы {year} + один пользователь (338)",
+                           aid="factory_reset")
     def _save(d):
         cur = d.get(ip) or {}
         cur.update(rec)

@@ -135,7 +135,7 @@ def _tick_backup() -> None:
                 if mx.event_add(ip, "cfg_drift", d[:200]):
                     mx.owner_alert(f"📝 <b>Конфиг изменился</b>: {esc(host)} "
                                    f"<code>{ip}</code> (372) — дифф: "
-                                   f"/swbackup diff {ip}")
+                                   f"/swbackup diff {ip}", aid="sw_cfg_change")
         except Exception as e:
             log(f"sw_cfg: бэкап {ip} не снялся: {e}")
     if done:

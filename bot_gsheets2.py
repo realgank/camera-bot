@@ -132,30 +132,31 @@ def apply_comments(pairs, xlsx_path, col_name="Комментарий"):
     import bot_inventory as inv
     bak = xlsx_path.replace(".xlsx", "") + \
         f".backup.{time.strftime('%Y%m%d_%H%M%S')}_comm.xlsx"
-    shutil.copy2(xlsx_path, bak)
-    wb = openpyxl.load_workbook(xlsx_path)
-    ws = wb[inv.SHEET_MAIN]
-    hdr = [c.value for c in ws[1]]
-    try:
-        ci = hdr.index(col_name) + 1
-    except ValueError:
-        ci = len(hdr) + 1
-        ws.cell(row=1, column=ci, value=col_name)
-    try:
-        ii = [str(h) for h in hdr].index("IP-адрес") + 1
-    except ValueError:
+    with inv.INV_WRITE_LOCK:  # C1: вся секция load→mutate→save
+        shutil.copy2(xlsx_path, bak)
+        wb = openpyxl.load_workbook(xlsx_path)
+        ws = wb[inv.SHEET_MAIN]
+        hdr = [c.value for c in ws[1]]
+        try:
+            ci = hdr.index(col_name) + 1
+        except ValueError:
+            ci = len(hdr) + 1
+            ws.cell(row=1, column=ci, value=col_name)
+        try:
+            ii = [str(h) for h in hdr].index("IP-адрес") + 1
+        except ValueError:
+            wb.close()
+            return 0
+        by_ip = dict(pairs)
+        n = 0
+        for r in range(2, ws.max_row + 1):
+            ip = str(ws.cell(row=r, column=ii).value or "").strip()
+            if ip in by_ip and str(ws.cell(row=r, column=ci).value or "") != by_ip[ip]:
+                ws.cell(row=r, column=ci, value=by_ip[ip])
+                n += 1
+        inv.save_wb(wb, xlsx_path)
         wb.close()
-        return 0
-    by_ip = dict(pairs)
-    n = 0
-    for r in range(2, ws.max_row + 1):
-        ip = str(ws.cell(row=r, column=ii).value or "").strip()
-        if ip in by_ip and str(ws.cell(row=r, column=ci).value or "") != by_ip[ip]:
-            ws.cell(row=r, column=ci, value=by_ip[ip])
-            n += 1
-    wb.save(xlsx_path)
-    wb.close()
-    return n
+        return n
 
 
 # ---------- метаданные, лок, ревизии ----------

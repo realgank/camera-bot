@@ -8,6 +8,7 @@ IP/имени/MAC/серийнику с fuzzy-нормализацией (as7c01
 import os
 import re
 import json
+import time
 import shutil
 import difflib
 import datetime
@@ -18,6 +19,33 @@ from bot_util import log, log_exc
 
 SHEET_MAIN = "Все камеры"
 FW_PATH = os.path.join(st.BASE, "_fw_cache.json")
+
+# ---------- C1: сериализация записи в Все_камеры.xlsx ----------
+# Каждый писатель (write_note, bot_dq.apply_writes, bot_dq_cmds.do_migrate,
+# bot_provision, bot_unknownq, bot_gsheets2) держит лок как контекст-менеджер
+# на ВСЮ секцию load→mutate→save, иначе параллельные потоки camera_bot
+# молча теряют правки друг друга.
+INV_WRITE_LOCK = threading.RLock()
+
+
+def save_wb(wb, path):
+    """Безопасное сохранение книги: wb.save во временный файл рядом +
+    os.replace (смерть процесса не оставит битый xlsx). На Windows os.replace
+    может дать PermissionError, пока читатель держит файл, — ретрай 3×0.3с."""
+    tmp = path + ".tmp_save"
+    wb.save(tmp)
+    for att in range(3):
+        try:
+            os.replace(tmp, path)
+            return
+        except PermissionError:
+            if att == 2:
+                try:
+                    os.remove(tmp)
+                except OSError:
+                    pass
+                raise
+            time.sleep(0.3)
 
 # поле карточки -> заголовок колонки в листе «Все камеры»
 COLS = {"n": "№", "name": "Название (по ТЗ)", "ip": "IP-адрес", "mac": "MAC-адрес",
@@ -345,27 +373,28 @@ def write_note(ip, text):
     Возвращает (путь_бэкапа, row) или бросает исключение."""
     import openpyxl
     path = inv_path()
-    rec = get(ip)
-    if not rec:
-        raise ValueError(f"IP {ip} не найден в инвентаре")
     ts = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
     bak = os.path.join(os.path.dirname(path), f"Все_камеры.backup.{ts}_bot.xlsx")
-    shutil.copy2(path, bak)  # I42
-    wb = openpyxl.load_workbook(path)
-    try:
-        ws = wb[SHEET_MAIN]
-        headers = [c.value for c in ws[1]]
-        if "Примечание" in headers:
-            nc = headers.index("Примечание") + 1
-        else:
-            nc = len(headers) + 1
-            ws.cell(row=1, column=nc, value="Примечание")
-        ws.cell(row=rec["row"], column=nc, value=text)
-        wb.save(path)
-    finally:
-        wb.close()
-    with _lock:
-        _inv["mtime"] = None  # перечитать при следующем запросе
+    with INV_WRITE_LOCK:  # C1: вся секция load→mutate→save
+        rec = get(ip)
+        if not rec:
+            raise ValueError(f"IP {ip} не найден в инвентаре")
+        shutil.copy2(path, bak)  # I42
+        wb = openpyxl.load_workbook(path)
+        try:
+            ws = wb[SHEET_MAIN]
+            headers = [c.value for c in ws[1]]
+            if "Примечание" in headers:
+                nc = headers.index("Примечание") + 1
+            else:
+                nc = len(headers) + 1
+                ws.cell(row=1, column=nc, value="Примечание")
+            ws.cell(row=rec["row"], column=nc, value=text)
+            save_wb(wb, path)
+        finally:
+            wb.close()
+        with _lock:
+            _inv["mtime"] = None  # перечитать при следующем запросе
     try:  # Волна F (265/267): журнал изменений + CSV-срез (best-effort)
         import bot_reconcile
         bot_reconcile.record_change("note", SHEET_MAIN, rec.get("mac") or ip,

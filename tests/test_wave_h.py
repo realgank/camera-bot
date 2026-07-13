@@ -292,7 +292,7 @@ class TestSwMon(Base):
         old_get, old_alert = sw.cross24_get, self.mx.owner_alert
         sw.cross24_get = self._mock_transport([2000, 0], [True, True],
                                               "[10,0,0,0]")
-        self.mx.owner_alert = lambda text, silent=False: alerts.append(text)
+        self.mx.owner_alert = lambda text, silent=False, **kw: alerts.append(text)
         mon.owner_alert = self.mx.owner_alert
         try:
             mon._poll_cross24("10.10.60.99")
@@ -317,7 +317,7 @@ class TestSwMon(Base):
         # 350 Вт из 370 = 94% > 85%
         sw.cross24_get = self._mock_transport([15000] * 23, [True] * 23,
                                               "[1,0,0,0]", dev_power=350000)
-        self.mx.owner_alert = lambda text, silent=False: alerts.append(text)
+        self.mx.owner_alert = lambda text, silent=False, **kw: alerts.append(text)
         try:
             mon._poll_cross24("10.10.60.98")
         finally:
@@ -347,7 +347,7 @@ class TestSwMon(Base):
                 {"macAddr": "DE:AD:BE:EF:11:22", "port": "GE5", "vlan": 1}]
         sw.cross24_get = self._mock_transport([2000], [True], "[1,0,0,0]",
                                               macs=macs)
-        self.mx.owner_alert = lambda text, silent=False: alerts.append(text)
+        self.mx.owner_alert = lambda text, silent=False, **kw: alerts.append(text)
         try:
             mon._poll_cross24("10.10.60.97")
         finally:

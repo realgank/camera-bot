@@ -61,11 +61,17 @@ def _tick():
         log(f"autosync: запускаю дифф-синк (dirty: {s.get('reason')})")
         import bot_gsheets2
         txt, _kb = bot_gsheets2.diff_sync(dry=False)
+        # M2: diff_sync мог НЕ синкать (занят SYNC_LOCK «⏳» или чужой
+        # метадата-лок «🔒») — тогда dirty не сбрасываем, повтор на след. тике.
+        if (txt or "").startswith(("⏳", "🔒")):
+            log(f"autosync: синк не выполнился ({(txt or '')[:60]}) — "
+                f"dirty остаётся, повторю на следующем тике")
+            return
         clear_dirty()
         try:
             import bot_metrics as mx
             mx.owner_alert("🤖 <b>Автосинк</b> (I27, /autosync):\n" + txt,
-                           silent=True)
+                           silent=True, aid="autosync")
         except Exception:
             pass
     except Exception:

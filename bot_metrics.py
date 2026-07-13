@@ -319,7 +319,14 @@ def rotation_batch(name: str, n: int) -> List[str]:
 ALERT_HOOKS: list = []   # Волна I (402): подписчики алертов (журнал в Sheets)
 
 
-def owner_alert(text: str, silent: bool = False) -> None:
+def owner_alert(text: str, silent: bool = False, aid: str = None) -> None:
+    if aid:  # /alerts: выключенные фоновые алерты не шлём
+        try:
+            import bot_alerts
+            if bot_alerts.muted(aid):
+                return
+        except Exception:
+            pass
     for h in list(ALERT_HOOKS):  # 402: лист «Журнал событий» и пр.
         try:
             h(text)

@@ -1,4 +1,3 @@
-import os
 # -*- coding: utf-8 -*-
 """Общие утилиты бота: логирование с ротацией, экранирование HTML,
 человеческие тексты ошибок, память процесса.
@@ -13,7 +12,7 @@ import logging
 import logging.handlers
 
 BOT_VERSION = "2.9-J (2026-07-09)"
-LOG_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "camera_bot.log")
+LOG_PATH = r"C:\Users\1\camera\camera_bot.log"
 
 _logger = None
 

@@ -199,22 +199,19 @@ def cb_poer(chat, cq, key):
         send(chat, txt, markup=kb)
 
 
-def cb_poery(chat, cq, key):
-    """Шаг 3: исполнение. PoE возвращается в finally, save НЕ вызывается."""
-    p = _confirm.take(key)
-    if not p:
-        answer_cq(cq.get("id"), "⌛ Подтверждение устарело — повтори /reboot")
-        return
-    answer_cq(cq.get("id"), "⚡ Дёргаю PoE…")
-    chat_action(chat)
-    ip, sip, port = p["ip"], p["sw_ip"], p["port"]
-    _audit("go", f"{ip} via {sip}:{port} подтверждён владельцем")
+def poe_cycle(sip, port, ip, off_s=None, wait_s=None):
+    """Ядро PoE-ребута: off → пауза → on (verify) → ждать возврата камеры
+    TCP-пробой. Возвращает (poe_ok: bool, back_s: float|None). Конфиг свитча
+    НЕ сохраняется. Переиспользуется /reboot (cb_poery) и watchdog bot_newcam.
+    Вызывающий сам отвечает за гарды (find_port + port_guard) и подтверждение."""
+    off_s = float(st.cget("poe_reboot_off_s")) if off_s is None else off_s
+    wait_s = float(st.cget("poe_reboot_wait_s")) if wait_s is None else wait_s
     idx = sw.port_index(port)
     poe_ok = False
     try:
         sw.cross24_set(sip, "poe_poeEdit",
                        {"portList": port, "portEnable": 0, "portWatchDog": 0})
-        time.sleep(float(st.cget("poe_reboot_off_s")))
+        time.sleep(off_s)
     finally:
         try:  # portEnable — RadioGroup 1/0; всегда верифицируем состояние
             sw.cross24_set(sip, "poe_poeEdit",
@@ -224,12 +221,7 @@ def cb_poery(chat, cq, key):
         except Exception:
             log_exc(f"poe_reboot: не смог вернуть PoE {sip} {port}")
     if not poe_ok:
-        send(chat, f"❌ <b>PoE порта {esc(port)} @ <code>{sip}</code> НЕ "
-                   f"вернулся</b> — проверь вручную: /poe {sip} !", )
-        _audit("poe_fail", f"{ip} {sip}:{port} PoE не подтвердился")
-        return
-    # ждём возвращения камеры (TCP 80/554) до poe_reboot_wait_s
-    wait_s = float(st.cget("poe_reboot_wait_s"))
+        return False, None
     t0 = time.time()
     back = None
     while time.time() - t0 < wait_s:
@@ -237,6 +229,26 @@ def cb_poery(chat, cq, key):
             back = time.time() - t0
             break
         time.sleep(3)
+    return True, back
+
+
+def cb_poery(chat, cq, key):
+    """Шаг 3: исполнение. PoE возвращается в poe_cycle, save НЕ вызывается."""
+    p = _confirm.take(key)
+    if not p:
+        answer_cq(cq.get("id"), "⌛ Подтверждение устарело — повтори /reboot")
+        return
+    answer_cq(cq.get("id"), "⚡ Дёргаю PoE…")
+    chat_action(chat)
+    ip, sip, port = p["ip"], p["sw_ip"], p["port"]
+    _audit("go", f"{ip} via {sip}:{port} подтверждён владельцем")
+    wait_s = float(st.cget("poe_reboot_wait_s"))
+    poe_ok, back = poe_cycle(sip, port, ip)
+    if not poe_ok:
+        send(chat, f"❌ <b>PoE порта {esc(port)} @ <code>{sip}</code> НЕ "
+                   f"вернулся</b> — проверь вручную: /poe {sip} !", )
+        _audit("poe_fail", f"{ip} {sip}:{port} PoE не подтвердился")
+        return
     try:
         import bot_metrics as mx
         mx.event_add(ip, "poe_reboot", f"{sip}:{port}"
@@ -263,6 +275,13 @@ def cb_poery(chat, cq, key):
         f"{back and round(back)}s)", logging.WARNING)
 
 
+def cb_poeq(chat, cq, ip):
+    """Кнопка «⚡ PoE-ребут» под алертом падения: тот же путь, что /reboot —
+    поиск порта, гарды (>1 MAC = отказ) и двухшаговое подтверждение."""
+    answer_cq(cq.get("id"), "Готовлю PoE-ребут…")
+    cmd_reboot(chat, arg=ip)
+
+
 HANDLERS = {"/reboot": cmd_reboot}
 ALIASES = {"/поребут": "/reboot", "/poe_reboot": "/reboot"}
-CALLBACKS = {"poeR": cb_poer, "poeRy": cb_poery}
+CALLBACKS = {"poeR": cb_poer, "poeRy": cb_poery, "poeQ": cb_poeq}

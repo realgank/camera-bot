@@ -207,7 +207,8 @@ def _probe_one(ip: str) -> None:
             mx.owner_alert(f"🧟 <b>RTSP-зомби</b>: {esc(inv.label(ip) or ip)} — "
                            f"порт 554 открыт, SDP не отдаётся "
                            f"(код {r.get('code') or esc(r.get('err') or '?')})."
-                           f" Поток мёртв при живой камере. /rtsp_check {ip}")
+                           f" Поток мёртв при живой камере. /rtsp_check {ip}",
+                           aid="rtsp_zombie")
         return
     mx.metric_add(ip, "rtsp_ms", r["ms"])
     summ = parse_sdp(r["sdp"])
@@ -215,7 +216,7 @@ def _probe_one(ip: str) -> None:
         if mx.event_add(ip, "sdp_drift", f"{k}: {was} -> {now_}"):
             mx.owner_alert(f"🎛 <b>Дрейф потока</b>: {esc(inv.label(ip) or ip)}"
                            f" — {esc(k)}: {esc(was)} → {esc(now_)} "
-                           f"(кто-то менял настройки энкодера?)")
+                           f"(кто-то менял настройки энкодера?)", aid="rtsp_drift")
 
 
 def _tick() -> None:

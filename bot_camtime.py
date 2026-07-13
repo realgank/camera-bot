@@ -51,7 +51,8 @@ def _poll_one(ip: str) -> dict:
         if mx.event_add(ip, "auth401", cooldown_h=24):
             mx.owner_alert(f"🚨 <b>КРИТИЧНО: не подошли креды Admin/1234</b> "
                            f"на {esc(inv.label(ip) or ip)} — возможно, "
-                           f"кто-то сменил пароль камеры! (335)")
+                           f"кто-то сменил пароль камеры! (335)",
+                           aid="camtime_cred_fail")
         return {}
     if "offset_s" not in r:
         return {}
@@ -59,12 +60,11 @@ def _poll_one(ip: str) -> dict:
     mx.metric_add(ip, "clock_off", r["offset_s"])   # 309
     prev = (store.jload(_spath(), {}).get(ip) or {})
     if is_jump(prev.get("off"), r["offset_s"]):
-        if mx.event_add(ip, "clockjump",
-                        f"{_fmt_off(prev.get('off'))} -> "
-                        f"{_fmt_off(r['offset_s'])}"):
-            mx.owner_alert(f"⏰ <b>Часы прыгнули</b>: {esc(inv.label(ip) or ip)}"
-                           f" — было {_fmt_off(prev.get('off'))}, стало "
-                           f"{_fmt_off(r['offset_s'])} (ребут камеры / RTC?)")
+        # событие пишем для статистики (/clock_report «прыжков за 7 дн.»),
+        # но владельца не дёргаем — пуш «Часы прыгнули» отключён по запросу.
+        mx.event_add(ip, "clockjump",
+                     f"{_fmt_off(prev.get('off'))} -> "
+                     f"{_fmt_off(r['offset_s'])}")
     rec = {"off": r["offset_s"], "ts": now, "type": r.get("type") or "?",
            "tz": r.get("tz") or "?", "dst": r.get("dst"),
            "year": r.get("year"), "ms": r.get("ms")}
@@ -99,7 +99,7 @@ def _tick() -> None:
         lines += [f"• {esc(inv.label(i) or i)}: {_fmt_off(o)}"
                   for i, o in drifted[:10]]
         lines.append("Подробно: /clock_report")
-        mx.owner_alert("\n".join(lines))
+        mx.owner_alert("\n".join(lines), aid="camtime_summary")
     log(f"clock: ротация {len(batch)} камер за {time.time() - t0:.1f}s")
 
 

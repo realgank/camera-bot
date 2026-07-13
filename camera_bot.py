@@ -36,7 +36,7 @@ import logging
 import threading
 from concurrent.futures import ThreadPoolExecutor
 
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, r"C:\Users\1\camera")
 
 from bot_util import setup_logging, log, log_exc, BOT_VERSION
 import bot_state as st
@@ -254,15 +254,46 @@ def process_update(upd):
             pass
 
 
+_HUNG = []                    # R12+: брошенные по таймауту потоки (живые daemon)
+_HUNG_LOCK = threading.Lock()
+
+
+def hung_count():
+    """Число ещё живых «брошенных» потоков; умершие вычищаются из списка."""
+    with _HUNG_LOCK:
+        _HUNG[:] = [t for t in _HUNG if t.is_alive()]
+        return len(_HUNG)
+
+
+def _upd_chat(upd):
+    """chat_id из апдейта — чтобы ответить отправителю при перегрузке."""
+    m = upd.get("message") or upd.get("edited_message") or {}
+    cbm = (upd.get("callback_query") or {}).get("message") or {}
+    return (m.get("chat") or cbm.get("chat") or {}).get("id")
+
+
 def run_update(upd):
-    """R12: таймаут на обработку — зависшая команда не копится молча."""
+    """R12: таймаут на обработку — зависшая команда не копится молча.
+    Убить поток нельзя (daemon живёт и держит сокеты) — поэтому лимит:
+    при избытке живых брошенных потоков новые команды отклоняем."""
+    limit = int(st.cget("hung_threads_max") or 20)
+    if hung_count() >= limit:
+        log(f"HUNG-LIMIT: живых брошенных потоков >= {limit} — апдейт "
+            f"{upd.get('update_id')} отклонён", logging.WARNING)
+        chat = _upd_chat(upd)
+        if chat:
+            tgm.send(chat, "⏳ Слишком много зависших операций, подожди.")
+        return
     t = threading.Thread(target=process_update, args=(upd,), daemon=True)
     t.start()
     t.join(st.cget("cmd_timeout_s"))
     if t.is_alive():
+        with _HUNG_LOCK:
+            _HUNG.append(t)
         st.note_error()
         log(f"TIMEOUT: апдейт {upd.get('update_id')} висит "
-            f"> {st.cget('cmd_timeout_s')}s — бросаю", logging.ERROR)
+            f"> {st.cget('cmd_timeout_s')}s — бросаю "
+            f"(зависших: {hung_count()}/{limit})", logging.ERROR)
         owner = st.cget("owner_chat_id")
         if owner:
             tgm.send(owner, "⏱ Команда выполняется слишком долго и была брошена "
@@ -317,44 +348,58 @@ def main():
                               thread_name_prefix="cmd")  # R9/U49
     # R32 + Волна J (U44): inline_query приходят только если включён /setinline
     allowed = json.dumps(["message", "callback_query", "inline_query"])
-    fails, delay = 0, 2
+    fails, delay, loop_errs = 0, 2, 0
     log(f"bot start v{BOT_VERSION} pid={os.getpid()} offset={offset}")
 
     while not STOP.is_set():
-        LAST_ALIVE[0] = time.time()
-        pt = obs.poll_timeout()  # Волна E (215): короче в DEGRADED/BAD
-        t0p = time.time()
-        r = tgm.tg("getUpdates",
-                   {"timeout": pt, "offset": offset, "allowed_updates": allowed},
-                   retries=1, timeout=(10, pt + 30))
-        ok_poll = bool(r and r.get("ok"))
-        obs.note_poll(time.time() - t0p, ok_poll,   # Волна E (213/246)
-                      empty=not (ok_poll and r["result"]), timeout_s=pt)
-        LAST_ALIVE[0] = time.time()
-        if STOP.is_set():
-            break
-        if not r or not r.get("ok"):
-            fails += 1
-            if fails >= st.cget("max_poll_fails"):  # R8
-                log(f"getUpdates: {fails} неудач подряд — выходим, "
+        try:  # исключение итерации (obs.* и пр.) не должно убить цикл молча
+            LAST_ALIVE[0] = time.time()
+            pt = obs.poll_timeout()  # Волна E (215): короче в DEGRADED/BAD
+            t0p = time.time()
+            r = tgm.tg("getUpdates",
+                       {"timeout": pt, "offset": offset, "allowed_updates": allowed},
+                       retries=1, timeout=(10, pt + 30))
+            ok_poll = bool(r and r.get("ok"))
+            obs.note_poll(time.time() - t0p, ok_poll,   # Волна E (213/246)
+                          empty=not (ok_poll and r["result"]), timeout_s=pt)
+            LAST_ALIVE[0] = time.time()
+            if STOP.is_set():
+                break
+            if not r or not r.get("ok"):
+                fails += 1
+                if fails >= st.cget("max_poll_fails"):  # R8
+                    log(f"getUpdates: {fails} неудач подряд — выходим, "
+                        f"run_bot.cmd перезапустит", logging.CRITICAL)
+                    try:  # Волна E (230)
+                        bot_release.mark_exit("poll_fails", 1)
+                    except Exception:
+                        pass
+                    sys.exit(1)
+                log(f"getUpdates неудача #{fails}, пауза {delay}s", logging.WARNING)
+                STOP.wait(delay)
+                delay = min(delay * 2, 60)  # R7: бэкофф 2→60с
+                continue
+            fails, delay, loop_errs = 0, 2, 0  # R7: сброс после успеха
+            for upd in r["result"]:
+                offset = upd["update_id"] + 1
+                if st.seen_update(upd["update_id"]):  # R25
+                    continue
+                pool.submit(run_update, upd)
+            if r["result"]:
+                st.save_offset(offset)
+        except Exception:  # транзиентная ошибка — пауза и дальше; серия — выход
+            st.note_error()
+            loop_errs += 1
+            log_exc(f"main loop: исключение итерации #{loop_errs}")
+            if loop_errs >= st.cget("max_poll_fails"):
+                log(f"main loop: {loop_errs} исключений подряд — выходим, "
                     f"run_bot.cmd перезапустит", logging.CRITICAL)
-                try:  # Волна E (230)
-                    bot_release.mark_exit("poll_fails", 1)
+                try:  # Волна E (230): маркер как в остальных ветках выхода
+                    bot_release.mark_exit("mainloop_error", 1)
                 except Exception:
                     pass
                 sys.exit(1)
-            log(f"getUpdates неудача #{fails}, пауза {delay}s", logging.WARNING)
-            STOP.wait(delay)
-            delay = min(delay * 2, 60)  # R7: бэкофф 2→60с
-            continue
-        fails, delay = 0, 2  # R7: сброс после успеха
-        for upd in r["result"]:
-            offset = upd["update_id"] + 1
-            if st.seen_update(upd["update_id"]):  # R25
-                continue
-            pool.submit(run_update, upd)
-        if r["result"]:
-            st.save_offset(offset)  # R14
+            STOP.wait(3)  # R14
 
     # R13: graceful — подтверждаем offset, чтобы апдейты не пришли повторно
     log("Останавливаюсь: ack offset + сохранение состояния", logging.WARNING)

@@ -213,7 +213,8 @@ def _snap_columns(sid, sa, main_title, rows, width):
             [f'=HYPERLINK("https://drive.google.com/file/d/{fid}"{s}"снимок")'
              if fid else ""])
         img_col.append(
-            [f'=IMAGE("https://drive.google.com/uc?id={fid}")' if fid else ""])
+            [f'=IMAGE("https://drive.google.com/thumbnail?id={fid}&sz=w800")'
+             if fid else ""])
     data = [{"range": f"'{main_title}'!{col_letter(width)}1",
              "values": link_col}]
     if thumbs:  # 412: тяжёлый лист — только по флагу

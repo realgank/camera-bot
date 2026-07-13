@@ -29,6 +29,8 @@ class TestHealth(unittest.TestCase):
             "lifecycle_path": os.path.join(self.tmp, "lc.json"),
             "quiet_enabled": False,   # тихие часы не должны глотать алерты теста
             "health_fail_threshold": 2,
+            "health_confirm_probes": 1,   # подтверждения выключены по умолчанию
+            "health_confirm_delay_s": 0,
             "health_workers": 4,
             "health_alerts_max": 8,
             "health_mass_threshold": 99,   # массовую группировку не триггерим
@@ -46,7 +48,7 @@ class TestHealth(unittest.TestCase):
         self.alerts = []
         patches = [
             mock.patch.object(bh, "_alert",
-                              lambda text, markup=None, silent=False:
+                              lambda text, markup=None, silent=False, **kw:
                               self.alerts.append(text)),
             mock.patch.object(bh, "target_ips",
                               lambda: ["10.0.0.1", "10.0.0.2"]),
@@ -117,6 +119,33 @@ class TestHealth(unittest.TestCase):
         self._run({"10.0.0.1": True, "10.0.0.2": False})  # 1-й провал
         self.assertFalse(bh.snapshot()["ips"]["10.0.0.2"]["ok"])
         self.assertTrue(any("10.0.0.2" in a for a in self.alerts))
+
+    def test_confirm_probes_filter_blips_and_alert_real_down(self):
+        """Падение подтверждается health_confirm_probes пробами внутри прогона:
+        разовый TCP-блип не алертится, настоящий провал — алерт в тот же прогон."""
+        st.CFG["health_confirm_probes"] = 3
+        st.CFG["health_fail_threshold"] = 1
+        self._run({"10.0.0.1": True, "10.0.0.2": True})
+        # блип: первая проба False, перепроверки — True
+        calls = {"n": 0}
+
+        def flaky(ip):
+            if ip == "10.0.0.2":
+                calls["n"] += 1
+                return calls["n"] > 1
+            return True
+
+        with mock.patch.object(bh, "probe", flaky):
+            r = bh.run_once(alerts=True)
+        self.assertEqual(r["downs"], [])
+        self.assertEqual(self.alerts, [])
+        self.assertTrue(bh.snapshot()["ips"]["10.0.0.2"]["ok"])
+        # настоящее падение: все 3 пробы False — офлайн и алерт в этом прогоне
+        r = self._run({"10.0.0.1": True, "10.0.0.2": False})
+        self.assertIn("10.0.0.2", r["downs"])
+        self.assertFalse(bh.snapshot()["ips"]["10.0.0.2"]["ok"])
+        self.assertTrue(any("упала" in a and "10.0.0.2" in a
+                            for a in self.alerts))
 
     def test_report_text(self):
         self._run({"10.0.0.1": True, "10.0.0.2": True})

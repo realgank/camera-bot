@@ -103,7 +103,8 @@ def _check_cam(ip: str) -> None:
             mx.owner_alert(f"🖤 <b>Подозрение на чёрный/белый кадр</b>: "
                            f"{esc(inv.label(ip) or ip)}\n"
                            f"кадр {kb:.0f} КБ при медиане {med:.0f} КБ "
-                           f"(объектив закрыт/матрица/засветка?) · /imgqa {ip}")
+                           f"(объектив закрыт/матрица/засветка?) · /imgqa {ip}",
+                           aid="img_black")
     st_all = store.jload(_spath(), {})
     prev = st_all.get(ip) or {}
     cur_md5 = hashlib.md5(data).hexdigest()
@@ -115,7 +116,7 @@ def _check_cam(ip: str) -> None:
             if mx.event_add(ip, "frozen", "MD5 кадров идентичен"):
                 mx.owner_alert(f"🧊 <b>Кадр залип</b>: {esc(inv.label(ip) or ip)}\n"
                                f"MD5 снимков идентичен (энкодер завис при "
-                               f"живом ONVIF) · /imgqa {ip}")
+                               f"живом ONVIF) · /imgqa {ip}", aid="img_frozen")
     def _fn(d):
         d[ip] = {"md5": cur_md5, "ts": int(now), "kb": round(kb, 1)}
         if len(d) > 1500:  # не распухать

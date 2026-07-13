@@ -146,7 +146,8 @@ def issue_kb(ip: str) -> dict:
          {"text": "📸 Снимок", "callback_data": f"shot:{ip}"}],
         [{"text": "🔧 Взял в работу", "callback_data": f"iw:{ip}"},
          {"text": "✅ Починил", "callback_data": f"ifx:{ip}"}],
-        [{"text": "😴 В ремонте до…", "callback_data": f"isnz:{ip}"}]]}
+        [{"text": "😴 В ремонте до…", "callback_data": f"isnz:{ip}"},
+         {"text": "⚡ PoE-ребут", "callback_data": f"poeQ:{ip}"}]]}
 
 
 def _fmt_issue(it, now=None) -> str:

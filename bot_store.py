@@ -4,9 +4,15 @@
 безопасное чтение с дефолтом. Никогда не бросает наружу при чтении."""
 import os
 import json
+import time
 import threading
 
 from bot_util import log_exc
+
+# Windows: открытый на чтение файл блокирует os.replace (и наоборот) —
+# внешние читатели (агентские шеллы, редакторы) дают разовые Errno 13.
+_RETRIES = 5
+_RETRY_DELAY_S = 0.05
 
 _locks: dict = {}
 _glock = threading.Lock()
@@ -22,8 +28,16 @@ def lock_for(path: str) -> threading.RLock:
 def jload(path: str, default):
     """Читает JSON; при любой беде — копия default (тип должен совпасть)."""
     try:
-        with open(path, encoding="utf-8") as f:
-            data = json.load(f)
+        with lock_for(path):
+            for attempt in range(_RETRIES):
+                try:
+                    with open(path, encoding="utf-8") as f:
+                        data = json.load(f)
+                    break
+                except PermissionError:
+                    if attempt == _RETRIES - 1:
+                        raise
+                    time.sleep(_RETRY_DELAY_S)
         if isinstance(data, type(default)):
             return data
     except FileNotFoundError:
@@ -38,7 +52,14 @@ def jsave(path: str, obj) -> None:
         tmp = path + ".tmp"
         with open(tmp, "w", encoding="utf-8") as f:
             json.dump(obj, f, ensure_ascii=False, indent=1)
-        os.replace(tmp, path)
+        for attempt in range(_RETRIES):
+            try:
+                os.replace(tmp, path)
+                return
+            except PermissionError:
+                if attempt == _RETRIES - 1:
+                    raise
+                time.sleep(_RETRY_DELAY_S)
 
 
 def jupdate(path: str, default, fn):

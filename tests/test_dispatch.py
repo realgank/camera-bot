@@ -28,8 +28,8 @@ class TestDispatch(unittest.TestCase):
                                  h.ALIASES.pop("/тесткоманда", None)))
 
     def test_direct_call(self):
-        h.dispatch(0, "/testcmd", "арг")
-        self.assertEqual(self.calls, [(0, "арг")])
+        h.dispatch(313802130, "/testcmd", "арг")
+        self.assertEqual(self.calls, [(313802130, "арг")])
 
     def test_alias(self):
         h.dispatch(1, "/тесткоманда", "x")

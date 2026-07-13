@@ -108,8 +108,7 @@ def _do_find(chat, prefix: str, reply_to=None):
     mid = ((r or {}).get("result") or {}).get("message_id")
     t0 = time.time()
     live = _scan_live(chat, prefix, mid, eta_s)
-    stopped = _stop.is_set()
-    arp = net.arp_table()
+    stopped, arp = _stop.is_set(), net.arp_table()
     hosts = {ip: arp.get(ip, "—") for ip in live}
     __import__("bot_unknownq").note_hosts(hosts, source="find")  # I36, safe
     ips = sorted(hosts, key=lambda x: int(x.split(".")[-1]))
@@ -160,13 +159,14 @@ def _do_find(chat, prefix: str, reply_to=None):
 
 def _find_kb(page: int) -> Optional[dict]:
     rows = []
-    n = len(_fs["pages"])
+    with _fs_lock:  # гонка cb_fmore/нового /find с чтением pages/rest
+        n, rest = len(_fs["pages"]), len(_fs["rest"])
     if n > 1:
         rows.append([{"text": "◀️", "callback_data": f"fpg:{page - 1}"},
                      {"text": f"{page + 1}/{n}", "callback_data": f"fpg:{page}"},
                      {"text": "▶️", "callback_data": f"fpg:{page + 1}"}])
-    if _fs["rest"]:
-        rows.append([{"text": f"🔬 Опросить ONVIF ещё {min(len(_fs['rest']), st.cget('onvif_limit'))}",
+    if rest:
+        rows.append([{"text": f"🔬 Опросить ONVIF ещё {min(rest, st.cget('onvif_limit'))}",
                       "callback_data": "fmore"}])
     return {"inline_keyboard": rows} if rows else None
 
